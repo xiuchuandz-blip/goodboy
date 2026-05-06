@@ -28,8 +28,16 @@ const proxy = upstreamUrl
       changeOrigin: true,
       pathRewrite: { "^": "/v1" },
       on: {
-        proxyReq(proxyReq) {
+        proxyReq(proxyReq, req) {
           proxyReq.setHeader("Authorization", `Bearer ${upstreamKey}`);
+
+          // express.json() consumes the body stream — re-inject it so the upstream gets the payload
+          if (req.body && Object.keys(req.body).length > 0) {
+            const bodyData = JSON.stringify(req.body);
+            proxyReq.setHeader("Content-Type", "application/json");
+            proxyReq.setHeader("Content-Length", Buffer.byteLength(bodyData));
+            proxyReq.write(bodyData);
+          }
         },
         error(err, _req, res) {
           logger.error({ err }, "Proxy error");
