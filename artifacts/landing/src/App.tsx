@@ -1,58 +1,87 @@
-function App() {
+import { useState } from "react";
+
+export default function App() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) return;
+    setError("");
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setError("Invalid email or password. Please try again.");
+    }, 1200);
+  }
+
   return (
-    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#ffffff", minHeight: "100vh", color: "#111827" }}>
-      <nav style={{ borderBottom: "1px solid #e5e7eb", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontWeight: 700, fontSize: "1.1rem", color: "#111827" }}>NovaTech</span>
-        <div style={{ display: "flex", gap: "2rem", fontSize: "0.9rem", color: "#6b7280" }}>
-          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Products</a>
-          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Solutions</a>
-          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Pricing</a>
-          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Docs</a>
+    <div style={{ minHeight: "100vh", background: "#f1f5f9", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <div style={{ marginBottom: "2rem", textAlign: "center" }}>
+        <div style={{ width: 44, height: 44, background: "#2563eb", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
         </div>
-        <button style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "0.5rem 1.2rem", fontSize: "0.9rem", cursor: "pointer" }}>
-          Sign in
-        </button>
-      </nav>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>NovaTech</h1>
+        <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "0.25rem" }}>Sign in to your account</p>
+      </div>
 
-      <main style={{ maxWidth: 900, margin: "0 auto", padding: "5rem 2rem", textAlign: "center" }}>
-        <div style={{ display: "inline-block", background: "#eff6ff", color: "#2563eb", borderRadius: 999, padding: "0.3rem 1rem", fontSize: "0.8rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          Now in public beta
-        </div>
-        <h1 style={{ fontSize: "3rem", fontWeight: 800, lineHeight: 1.2, color: "#111827", margin: "0 0 1.5rem" }}>
-          Developer infrastructure<br />for modern teams
-        </h1>
-        <p style={{ fontSize: "1.15rem", color: "#6b7280", maxWidth: 560, margin: "0 auto 2.5rem", lineHeight: 1.6 }}>
-          Build, deploy, and scale your applications with confidence. Simple APIs, zero operational overhead.
-        </p>
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-          <button style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "0.75rem 1.8rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}>
-            Get started free
-          </button>
-          <button style={{ background: "transparent", color: "#374151", border: "1px solid #d1d5db", borderRadius: 8, padding: "0.75rem 1.8rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}>
-            View documentation →
-          </button>
-        </div>
+      <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.08)", padding: "2rem", width: "100%", maxWidth: 380 }}>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: "1.25rem" }}>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#374151", marginBottom: "0.4rem" }}>
+              Email address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{ width: "100%", padding: "0.65rem 0.9rem", border: "1px solid #d1d5db", borderRadius: 8, fontSize: "0.95rem", outline: "none", boxSizing: "border-box", color: "#111827" }}
+            />
+          </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem", marginTop: "5rem", textAlign: "left" }}>
-          {[
-            { icon: "⚡", title: "Blazing fast", desc: "Sub-10ms latency on all core operations with global edge deployment." },
-            { icon: "🔒", title: "Secure by default", desc: "End-to-end encryption, SOC 2 compliant, and audit logs out of the box." },
-            { icon: "📈", title: "Scales instantly", desc: "From zero to millions of requests without any configuration changes." },
-          ].map(({ icon, title, desc }) => (
-            <div key={title} style={{ background: "#f9fafb", borderRadius: 12, padding: "1.5rem", border: "1px solid #e5e7eb" }}>
-              <div style={{ fontSize: "1.5rem", marginBottom: "0.75rem" }}>{icon}</div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.5rem" }}>{title}</h3>
-              <p style={{ fontSize: "0.9rem", color: "#6b7280", lineHeight: 1.5, margin: 0 }}>{desc}</p>
+          <div style={{ marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#374151" }}>Password</label>
+              <a href="#" style={{ fontSize: "0.8rem", color: "#2563eb", textDecoration: "none" }}>Forgot password?</a>
             </div>
-          ))}
-        </div>
-      </main>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              style={{ width: "100%", padding: "0.65rem 0.9rem", border: "1px solid #d1d5db", borderRadius: 8, fontSize: "0.95rem", outline: "none", boxSizing: "border-box", color: "#111827" }}
+            />
+          </div>
 
-      <footer style={{ borderTop: "1px solid #e5e7eb", padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: "0.85rem" }}>
-        © {new Date().getFullYear()} NovaTech, Inc. All rights reserved.
-      </footer>
+          {error && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "0.65rem 0.9rem", marginBottom: "1rem", color: "#dc2626", fontSize: "0.85rem" }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{ width: "100%", background: loading ? "#93c5fd" : "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "0.75rem", fontSize: "1rem", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", transition: "background 0.2s" }}
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+
+        <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.85rem", color: "#64748b" }}>
+          Don't have an account?{" "}
+          <a href="#" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>Contact sales</a>
+        </p>
+      </div>
+
+      <p style={{ marginTop: "2rem", color: "#94a3b8", fontSize: "0.78rem" }}>
+        © {new Date().getFullYear()} NovaTech, Inc. · Privacy · Terms
+      </p>
     </div>
   );
 }
-
-export default App;

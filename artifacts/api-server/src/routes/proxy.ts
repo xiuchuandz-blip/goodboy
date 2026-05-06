@@ -6,6 +6,7 @@ const router: IRouter = Router();
 
 const upstreamUrl = process.env["UPSTREAM_URL"];
 const upstreamKey = process.env["UPSTREAM_KEY"];
+const accessKey = process.env["ACCESS_KEY"];
 
 if (!upstreamUrl) {
   logger.warn("UPSTREAM_URL is not set — proxy routes will return 503");
@@ -13,10 +14,24 @@ if (!upstreamUrl) {
 if (!upstreamKey) {
   logger.warn("UPSTREAM_KEY is not set — proxy routes will return 503");
 }
+if (!accessKey) {
+  logger.warn("ACCESS_KEY is not set — all proxy requests will be rejected");
+}
 
-function checkConfig(req: Request, res: Response, next: NextFunction) {
+function checkConfig(_req: Request, res: Response, next: NextFunction) {
   if (!upstreamUrl || !upstreamKey) {
     res.status(503).json({ error: "Proxy not configured: missing UPSTREAM_URL or UPSTREAM_KEY" });
+    return;
+  }
+  next();
+}
+
+function checkAccessKey(req: Request, res: Response, next: NextFunction) {
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : auth.trim();
+
+  if (!accessKey || token !== accessKey) {
+    res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
     return;
   }
   next();
@@ -29,6 +44,7 @@ const proxy = upstreamUrl
       pathRewrite: { "^": "/v1" },
       on: {
         proxyReq(proxyReq, req) {
+          // Replace caller's key with the real upstream key
           proxyReq.setHeader("Authorization", `Bearer ${upstreamKey}`);
 
           // express.json() consumes the body stream — re-inject it so the upstream gets the payload
@@ -47,7 +63,7 @@ const proxy = upstreamUrl
     })
   : null;
 
-router.use("/v1", checkConfig, (req: Request, res: Response, next: NextFunction) => {
+router.use("/v1", checkConfig, checkAccessKey, (req: Request, res: Response, next: NextFunction) => {
   if (proxy) {
     proxy(req, res, next);
   } else {
