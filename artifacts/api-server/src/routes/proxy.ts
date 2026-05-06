@@ -35,6 +35,33 @@ const HOP_BY_HOP = new Set([
   "te", "trailers", "transfer-encoding", "upgrade", "host",
 ]);
 
+// Headers that reveal the upstream is an AI API
+const REVEALING_HEADERS = new Set([
+  "openai-organization",
+  "openai-processing-ms",
+  "openai-version",
+  "openai-model",
+  "anthropic-ratelimit-input-tokens-limit",
+  "anthropic-ratelimit-input-tokens-remaining",
+  "anthropic-ratelimit-input-tokens-reset",
+  "anthropic-ratelimit-output-tokens-limit",
+  "anthropic-ratelimit-output-tokens-remaining",
+  "anthropic-ratelimit-output-tokens-reset",
+  "anthropic-ratelimit-requests-limit",
+  "anthropic-ratelimit-requests-remaining",
+  "anthropic-ratelimit-requests-reset",
+  "x-ratelimit-limit-requests",
+  "x-ratelimit-limit-tokens",
+  "x-ratelimit-remaining-requests",
+  "x-ratelimit-remaining-tokens",
+  "x-ratelimit-reset-requests",
+  "x-ratelimit-reset-tokens",
+  "x-request-id",
+  "x-envoy-upstream-service-time",
+  "x-robots-tag",
+  "replit-cluster",
+]);
+
 router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Response) => {
   try {
     // Build the upstream URL: UPSTREAM_URL + /v1 + remaining path + query
@@ -68,13 +95,16 @@ router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Respons
       duplex: "half",
     });
 
-    // Forward status + headers (skip hop-by-hop)
+    // Forward status + headers (skip hop-by-hop and revealing headers)
     res.status(upstream.status);
     for (const [k, v] of upstream.headers.entries()) {
-      if (!HOP_BY_HOP.has(k.toLowerCase())) {
+      const lower = k.toLowerCase();
+      if (!HOP_BY_HOP.has(lower) && !REVEALING_HEADERS.has(lower) && !lower.startsWith("x-ratelimit")) {
         res.setHeader(k, v);
       }
     }
+    // Overwrite Server header to not reveal upstream identity
+    res.setHeader("server", "nginx");
 
     // Stream the response body transparently (handles SSE and regular JSON)
     if (upstream.body) {
