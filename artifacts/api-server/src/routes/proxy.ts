@@ -26,7 +26,7 @@ const proxy = upstreamUrl
   ? createProxyMiddleware<Request, Response>({
       target: upstreamUrl,
       changeOrigin: true,
-      pathRewrite: { "^/api/v1": "/v1" },
+      pathRewrite: { "^": "/v1" },
       on: {
         proxyReq(proxyReq) {
           proxyReq.setHeader("Authorization", `Bearer ${upstreamKey}`);

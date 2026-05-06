@@ -1,45 +1,44 @@
-# [Project name]
+# API 代理中转站
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+将上游 API 的真实地址和密钥隐藏起来，对外暴露一个自己的 OpenAI 兼容接口。
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/api-server run dev` — 启动 API 服务（端口 5000）
+- `pnpm run typecheck` — 全量类型检查
+- `pnpm run build` — 类型检查 + 构建所有包
+- Required env secrets: `UPSTREAM_URL`、`UPSTREAM_KEY`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
+- API: Express 5 + http-proxy-middleware 3
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/routes/proxy.ts` — 核心代理逻辑
+- `artifacts/api-server/src/routes/health.ts` — 健康检查 `/api/healthz`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- 代理挂载在 `/api/v1/*`，pathRewrite 补回 `/v1` 前缀（Express 路由会剥去挂载路径）
+- 所有来自调用方的 `Authorization` 头都被替换为真实的 `UPSTREAM_KEY`
+- 支持流式响应（SSE），http-proxy-middleware 原生透传
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+调用方使用本项目的 URL 和任意 key（或无需 key），即可访问上游 API，无需知道上游真实地址和密钥。
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- 对外不需要鉴权，拿到本项目 URL 即可使用
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- 修改代理配置后需要重新 build 并重启 workflow
+- UPSTREAM_URL 不要带末尾斜杠
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- 见 `pnpm-workspace` skill 了解 workspace 结构
