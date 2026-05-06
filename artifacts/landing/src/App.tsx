@@ -1,62 +1,56 @@
 function App() {
-  const base = window.location.origin;
-
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", background: "#0f172a", minHeight: "100vh", color: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-      <div style={{ maxWidth: 640, width: "100%" }}>
-        <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "#f8fafc", margin: 0 }}>API Proxy</h1>
-          <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>OpenAI 兼容接口中转站，直接配置使用即可。</p>
+    <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#ffffff", minHeight: "100vh", color: "#111827" }}>
+      <nav style={{ borderBottom: "1px solid #e5e7eb", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontWeight: 700, fontSize: "1.1rem", color: "#111827" }}>NovaTech</span>
+        <div style={{ display: "flex", gap: "2rem", fontSize: "0.9rem", color: "#6b7280" }}>
+          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Products</a>
+          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Solutions</a>
+          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Pricing</a>
+          <a href="#" style={{ color: "inherit", textDecoration: "none" }}>Docs</a>
         </div>
+        <button style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "0.5rem 1.2rem", fontSize: "0.9rem", cursor: "pointer" }}>
+          Sign in
+        </button>
+      </nav>
 
-        <div style={{ background: "#1e293b", borderRadius: 12, padding: "1.5rem", marginBottom: "1.5rem", border: "1px solid #334155" }}>
-          <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 1rem" }}>接入配置</h2>
-          <Row label="Base URL" value={`${base}/api/v1`} />
-          <Row label="API Key" value="任意字符串（无需验证）" dim />
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: "5rem 2rem", textAlign: "center" }}>
+        <div style={{ display: "inline-block", background: "#eff6ff", color: "#2563eb", borderRadius: 999, padding: "0.3rem 1rem", fontSize: "0.8rem", fontWeight: 600, marginBottom: "1.5rem" }}>
+          Now in public beta
         </div>
-
-        <div style={{ background: "#1e293b", borderRadius: 12, padding: "1.5rem", marginBottom: "1.5rem", border: "1px solid #334155" }}>
-          <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 1rem" }}>示例（curl）</h2>
-          <pre style={{ background: "#0f172a", borderRadius: 8, padding: "1rem", fontSize: "0.8rem", color: "#7dd3fc", overflowX: "auto", margin: 0 }}>{`curl ${base}/api/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer any-key" \\
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`}</pre>
-        </div>
-
-        <div style={{ background: "#1e293b", borderRadius: 12, padding: "1.5rem", border: "1px solid #334155" }}>
-          <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 1rem" }}>可用接口</h2>
-          <Endpoint method="GET" path="/api/v1/models" desc="列出可用模型" />
-          <Endpoint method="POST" path="/api/v1/chat/completions" desc="对话补全（支持流式）" />
-          <Endpoint method="POST" path="/api/v1/embeddings" desc="文本向量化" />
-        </div>
-
-        <p style={{ color: "#475569", fontSize: "0.8rem", marginTop: "1.5rem", textAlign: "center" }}>
-          所有请求均通过上游代理转发，真实密钥和地址对外不可见。
+        <h1 style={{ fontSize: "3rem", fontWeight: 800, lineHeight: 1.2, color: "#111827", margin: "0 0 1.5rem" }}>
+          Developer infrastructure<br />for modern teams
+        </h1>
+        <p style={{ fontSize: "1.15rem", color: "#6b7280", maxWidth: 560, margin: "0 auto 2.5rem", lineHeight: 1.6 }}>
+          Build, deploy, and scale your applications with confidence. Simple APIs, zero operational overhead.
         </p>
-      </div>
-    </div>
-  );
-}
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
+          <button style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "0.75rem 1.8rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}>
+            Get started free
+          </button>
+          <button style={{ background: "transparent", color: "#374151", border: "1px solid #d1d5db", borderRadius: 8, padding: "0.75rem 1.8rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}>
+            View documentation →
+          </button>
+        </div>
 
-function Row({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.5rem 0", borderBottom: "1px solid #334155" }}>
-      <span style={{ color: "#94a3b8", fontSize: "0.9rem" }}>{label}</span>
-      <span style={{ color: dim ? "#64748b" : "#7dd3fc", fontFamily: "monospace", fontSize: "0.85rem" }}>{value}</span>
-    </div>
-  );
-}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem", marginTop: "5rem", textAlign: "left" }}>
+          {[
+            { icon: "⚡", title: "Blazing fast", desc: "Sub-10ms latency on all core operations with global edge deployment." },
+            { icon: "🔒", title: "Secure by default", desc: "End-to-end encryption, SOC 2 compliant, and audit logs out of the box." },
+            { icon: "📈", title: "Scales instantly", desc: "From zero to millions of requests without any configuration changes." },
+          ].map(({ icon, title, desc }) => (
+            <div key={title} style={{ background: "#f9fafb", borderRadius: 12, padding: "1.5rem", border: "1px solid #e5e7eb" }}>
+              <div style={{ fontSize: "1.5rem", marginBottom: "0.75rem" }}>{icon}</div>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.5rem" }}>{title}</h3>
+              <p style={{ fontSize: "0.9rem", color: "#6b7280", lineHeight: 1.5, margin: 0 }}>{desc}</p>
+            </div>
+          ))}
+        </div>
+      </main>
 
-function Endpoint({ method, path, desc }: { method: string; path: string; desc: string }) {
-  const color = method === "GET" ? "#4ade80" : "#f59e0b";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 0", borderBottom: "1px solid #1e293b" }}>
-      <span style={{ color, fontFamily: "monospace", fontSize: "0.75rem", fontWeight: 700, minWidth: 36 }}>{method}</span>
-      <span style={{ color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.85rem", flex: 1 }}>{path}</span>
-      <span style={{ color: "#64748b", fontSize: "0.8rem" }}>{desc}</span>
+      <footer style={{ borderTop: "1px solid #e5e7eb", padding: "2rem", textAlign: "center", color: "#9ca3af", fontSize: "0.85rem" }}>
+        © {new Date().getFullYear()} NovaTech, Inc. All rights reserved.
+      </footer>
     </div>
   );
 }
