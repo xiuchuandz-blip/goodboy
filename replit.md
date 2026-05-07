@@ -4,31 +4,62 @@
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — 启动 API 服务（端口 5000）
+- `pnpm --filter @workspace/api-server run dev` — 启动 API 服务（端口 8080）
 - `pnpm run typecheck` — 全量类型检查
 - `pnpm run build` — 类型检查 + 构建所有包
-- Required env secrets: `UPSTREAM_URL`、`UPSTREAM_KEY`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5 + http-proxy-middleware 3
-- Build: esbuild (CJS bundle)
+- API: Express 5 + 原生 fetch 代理
+- Build: esbuild (ESM bundle)
 
 ## Where things live
 
 - `artifacts/api-server/src/routes/proxy.ts` — 核心代理逻辑
+- `artifacts/api-server/src/lib/upstreams.ts` — 多上游管理与路由策略
+- `artifacts/api-server/src/lib/keepalive.ts` — 定时 ping 防止上游睡眠
+- `artifacts/api-server/src/lib/cache.ts` — Anthropic 缓存控制注入
 - `artifacts/api-server/src/routes/health.ts` — 健康检查 `/api/healthz`
+
+## Environment Variables
+
+### 上游配置（二选一）
+
+**多上游（推荐）**
+- `UPSTREAM_URLS` — 逗号分隔的上游 URL 列表，末尾不带 `/`
+  - 例：`https://a.replit.dev/api,https://b.replit.dev/api`
+- `UPSTREAM_KEYS` — 与 URL 顺序对应的 key 列表
+  - 例：`key1,key2`
+
+**单上游（向下兼容）**
+- `UPSTREAM_URL` — 单个上游 URL
+- `UPSTREAM_KEY` — 对应 key
+
+### 路由策略
+
+- `ROUTING_STRATEGY` — `round-robin`（默认，轮询）或某个具体的上游 URL（固定指向）
+
+### 访问控制
+
+- `ACCESS_KEY` — 不设置则完全开放；设置后调用方需在 Authorization 头中携带此 key
+
+### Keepalive
+
+- `KEEPALIVE_ENABLED` — 设为 `true` 开启，每 3 分钟向所有上游发送 ping，防止 Replit 项目睡眠
+
+### 缓存控制（Anthropic prompt caching）
+
+- `CACHE_MODE` — `none`（默认，不注入）| `system-only` | `system+rolling`
+- `CACHE_TTL` — `5m`（默认）| `1h`（需同时自动添加 `extended-cache-ttl-2025-04-11` beta header）
 
 ## Architecture decisions
 
-- 代理挂载在 `/api/v1/*`，pathRewrite 补回 `/v1` 前缀（Express 路由会剥去挂载路径）
-- 所有来自调用方的 `Authorization` 头都被替换为真实的 `UPSTREAM_KEY`
-- 支持流式响应（SSE），http-proxy-middleware 原生透传
-
-## Product
-
-调用方使用本项目的 URL 和任意 key（或无需 key），即可访问上游 API，无需知道上游真实地址和密钥。
+- 代理挂载在 `/v1/*`，目标 URL 构造为 `${UPSTREAM_URL}/v1${path}`
+- 上游若为 Replit 部署的同类代理，`UPSTREAM_URL` 需含 `/api` 后缀（如 `https://xxx.replit.dev/api`）
+- 所有来自调用方的 `Authorization` 头都被替换为真实的上游 key
+- 支持流式响应（SSE），原生 fetch + pipe 透传
+- 轮询索引在进程内持久，重启后重置
 
 ## User preferences
 
@@ -36,8 +67,9 @@
 
 ## Gotchas
 
+- UPSTREAM_URL / UPSTREAM_URLS 不要带末尾斜杠
 - 修改代理配置后需要重新 build 并重启 workflow
-- UPSTREAM_URL 不要带末尾斜杠
+- CACHE_MODE=system+rolling 会修改请求体，仅对 Anthropic 兼容上游有效
 
 ## Pointers
 
