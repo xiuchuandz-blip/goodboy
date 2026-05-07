@@ -1,31 +1,11 @@
-import { logger } from "./logger";
-
-export type CacheMode = "none" | "system-only" | "system+rolling";
-export type CacheTTL = "5m" | "1h";
-
-const rawMode = process.env["CACHE_MODE"] ?? "none";
-const rawTTL = process.env["CACHE_TTL"] ?? "5m";
-
-const VALID_MODES: CacheMode[] = ["none", "system-only", "system+rolling"];
-const VALID_TTLS: CacheTTL[] = ["5m", "1h"];
-
-export const cacheMode: CacheMode = VALID_MODES.includes(rawMode as CacheMode)
-  ? (rawMode as CacheMode)
-  : "none";
-
-export const cacheTTL: CacheTTL = VALID_TTLS.includes(rawTTL as CacheTTL)
-  ? (rawTTL as CacheTTL)
-  : "5m";
-
-if (cacheMode !== "none") {
-  logger.info({ cacheMode, cacheTTL }, "Cache control injection enabled");
-}
+import { getSettings, type CacheMode, type CacheTTL } from "./state";
 
 function buildCacheControl(ttl: CacheTTL): Record<string, string> {
   return ttl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
 }
 
 export function injectCacheControl(body: unknown): unknown {
+  const { cacheMode, cacheTTL } = getSettings();
   if (cacheMode === "none") return body;
   if (!body || typeof body !== "object") return body;
 
@@ -34,7 +14,7 @@ export function injectCacheControl(body: unknown): unknown {
   let result = { ...obj };
 
   if (cacheMode === "system-only" || cacheMode === "system+rolling") {
-    if (typeof result["system"] === "string" && result["system"].length > 0) {
+    if (typeof result["system"] === "string" && (result["system"] as string).length > 0) {
       result["system"] = [{ type: "text", text: result["system"], cache_control: cc }];
     } else if (Array.isArray(result["system"]) && result["system"].length > 0) {
       const system = [...(result["system"] as unknown[])];
@@ -70,6 +50,7 @@ export function injectCacheControl(body: unknown): unknown {
 }
 
 export function buildCacheHeaders(reqHeaders: Record<string, string>): Record<string, string> {
+  const { cacheMode, cacheTTL } = getSettings();
   const extra: Record<string, string> = {};
 
   if (reqHeaders["anthropic-beta"]) {

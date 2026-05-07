@@ -1,9 +1,9 @@
 import { logger } from "./logger";
-import { upstreams } from "./upstreams";
+import { getAccounts } from "./state";
 
 const INTERVAL_MS = 3 * 60 * 1000;
 
-async function pingUpstream(url: string, key: string): Promise<void> {
+async function pingAccount(url: string, key: string): Promise<void> {
   const target = `${url}/v1/models`;
   try {
     const res = await fetch(target, {
@@ -22,16 +22,17 @@ export function startKeepalive(): void {
     return;
   }
 
-  if (upstreams.length === 0) {
-    logger.warn("Keepalive enabled but no upstreams configured");
+  const accounts = getAccounts();
+  if (accounts.length === 0) {
+    logger.warn("Keepalive enabled but no accounts configured");
     return;
   }
 
-  logger.info({ count: upstreams.length, intervalMs: INTERVAL_MS }, "Keepalive started");
+  logger.info({ count: accounts.length, intervalMs: INTERVAL_MS }, "Keepalive started");
 
   setInterval(() => {
-    for (const { url, key } of upstreams) {
-      void pingUpstream(url, key);
+    for (const { url, key } of getAccounts()) {
+      void pingAccount(url, key);
     }
   }, INTERVAL_MS);
 }

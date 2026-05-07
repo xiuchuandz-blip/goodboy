@@ -1,8 +1,9 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { Readable } from "stream";
 import { logger } from "../lib/logger";
-import { type Upstream, getUpstream } from "../lib/upstreams";
+import { getNextAccount, type Account } from "../lib/state";
 import { injectCacheControl, buildCacheHeaders } from "../lib/cache";
+import { createStatsInterceptor } from "../lib/stats-interceptor";
 
 const router: IRouter = Router();
 
@@ -10,20 +11,17 @@ const accessKey = process.env["ACCESS_KEY"];
 if (!accessKey) logger.info("ACCESS_KEY is not set — proxy is open (no authentication required)");
 
 function checkConfig(_req: Request, res: Response, next: NextFunction) {
-  const upstream = getUpstream();
-  if (!upstream) {
-    res.status(503).json({ error: "Proxy not configured: no upstreams available" });
+  const account = getNextAccount();
+  if (!account) {
+    res.status(503).json({ error: "Proxy not configured: no accounts available" });
     return;
   }
-  res.locals["upstream"] = upstream;
+  res.locals["account"] = account;
   next();
 }
 
 function checkAccessKey(req: Request, res: Response, next: NextFunction) {
-  if (!accessKey) {
-    next();
-    return;
-  }
+  if (!accessKey) { next(); return; }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : auth.trim();
   if (token !== accessKey) {
@@ -51,11 +49,11 @@ const REVEALING_HEADERS = new Set([
 ]);
 
 router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Response) => {
-  const upstream = res.locals["upstream"] as Upstream;
+  const account = res.locals["account"] as Account;
 
   try {
     const qs = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
-    const targetUrl = `${upstream.url}/v1${req.path}${qs}`;
+    const targetUrl = `${account.url}/v1${req.path}${qs}`;
 
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) {
@@ -63,12 +61,11 @@ router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Respons
         headers[k] = Array.isArray(v) ? v.join(", ") : (v ?? "");
       }
     }
-    headers["authorization"] = `Bearer ${upstream.key}`;
-
-    const cacheHeaders = buildCacheHeaders(headers);
-    Object.assign(headers, cacheHeaders);
+    headers["authorization"] = `Bearer ${account.key}`;
+    Object.assign(headers, buildCacheHeaders(headers));
 
     let body: string | undefined;
+    const isStreaming = !!req.body?.stream;
     if (req.method !== "GET" && req.method !== "HEAD" && req.body && Object.keys(req.body).length > 0) {
       const processedBody = injectCacheControl(req.body);
       body = JSON.stringify(processedBody);
@@ -76,7 +73,7 @@ router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Respons
       headers["content-length"] = String(Buffer.byteLength(body));
     }
 
-    logger.info({ method: req.method, target: targetUrl, upstream: upstream.url }, "Proxying request");
+    logger.info({ method: req.method, target: targetUrl, account: account.label }, "Proxying request");
 
     const upstreamRes = await fetch(targetUrl, {
       method: req.method,
@@ -96,7 +93,10 @@ router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Respons
     res.setHeader("server", "nginx");
 
     if (upstreamRes.body) {
-      Readable.fromWeb(upstreamRes.body as import("stream/web").ReadableStream<Uint8Array>).pipe(res);
+      const interceptor = createStatsInterceptor(account.url, isStreaming);
+      Readable.fromWeb(upstreamRes.body as import("stream/web").ReadableStream<Uint8Array>)
+        .pipe(interceptor)
+        .pipe(res);
     } else {
       res.end();
     }
