@@ -1,5 +1,5 @@
 {
   "app_dir": "artifacts/api-server",
   "build_command": "pnpm --filter @workspace/api-server run build",
-  "start_command": "node --enable-source-maps ./artifacts/api-server/dist/index.mjs"
+  "start_command": "node --enable-source-maps ./dist/index.mjs"
 }
