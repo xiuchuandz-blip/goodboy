@@ -10,7 +10,7 @@ const accessKey = process.env["ACCESS_KEY"];
 
 if (!upstreamUrl) logger.warn("UPSTREAM_URL is not set — proxy routes will return 503");
 if (!upstreamKey) logger.warn("UPSTREAM_KEY is not set — proxy routes will return 503");
-if (!accessKey) logger.warn("ACCESS_KEY is not set — all proxy requests will be rejected");
+if (!accessKey) logger.info("ACCESS_KEY is not set — proxy is open (no authentication required)");
 
 function checkConfig(_req: Request, res: Response, next: NextFunction) {
   if (!upstreamUrl || !upstreamKey) {
@@ -21,9 +21,13 @@ function checkConfig(_req: Request, res: Response, next: NextFunction) {
 }
 
 function checkAccessKey(req: Request, res: Response, next: NextFunction) {
+  if (!accessKey) {
+    next();
+    return;
+  }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : auth.trim();
-  if (!accessKey || token !== accessKey) {
+  if (token !== accessKey) {
     res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
     return;
   }
