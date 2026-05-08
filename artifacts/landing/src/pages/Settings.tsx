@@ -1,26 +1,71 @@
 import { useEffect, useState } from "react";
-import { Save } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { Save, Check, Shuffle, Pin, Database, Clock } from "lucide-react";
 import { useSettings, useUpdateSettings, useAccounts, type Settings } from "@/hooks/useAdmin";
 
-const CACHE_MODE_LABELS: Record<string, string> = {
-  none: "不启用",
-  "system-only": "System Only（缓存 system prompt）",
-  "system+rolling": "System + Rolling（滚动缓存）",
-};
+const CACHE_MODES: { value: Settings["cacheMode"]; label: string; desc: string }[] = [
+  { value: "none", label: "不启用", desc: "不修改请求体" },
+  { value: "system-only", label: "System Only", desc: "仅缓存 system prompt" },
+  { value: "system+rolling", label: "System + Rolling", desc: "滚动缓存对话历史" },
+];
 
-const CACHE_TTL_LABELS: Record<string, string> = {
-  "5m": "5 分钟（ephemeral）",
-  "1h": "1 小时（需 extended beta header）",
-};
+const CACHE_TTLS: { value: Settings["cacheTTL"]; label: string; sub: string }[] = [
+  { value: "5m", label: "5 分钟", sub: "ephemeral" },
+  { value: "1h", label: "1 小时", sub: "需 extended beta" },
+];
 
-export default function Settings() {
+function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <p className="text-sm text-slate-500 mt-0.5">{desc}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OptionGrid<T extends string>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string; sub?: string; desc?: string; icon?: React.ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`relative text-left p-3 rounded-lg border-2 transition-all ${
+              active
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-slate-200 bg-white hover:border-slate-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {opt.icon && (
+                <div className={active ? "text-indigo-600" : "text-slate-400"}>{opt.icon}</div>
+              )}
+              <span className={`text-sm font-medium ${active ? "text-indigo-900" : "text-slate-700"}`}>
+                {opt.label}
+              </span>
+              {active && <Check className="w-4 h-4 text-indigo-600 ml-auto" />}
+            </div>
+            {(opt.sub || opt.desc) && (
+              <p className="text-xs text-slate-500 mt-1">{opt.sub ?? opt.desc}</p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function SettingsPage() {
   const { data: settings, isLoading } = useSettings();
   const { data: accounts = [] } = useAccounts();
   const update = useUpdateSettings();
@@ -31,126 +76,116 @@ export default function Settings() {
     routingStrategy: "round-robin",
   });
 
-  useEffect(() => {
-    if (settings) setForm(settings);
-  }, [settings]);
+  useEffect(() => { if (settings) setForm(settings); }, [settings]);
 
-  function handleSave() {
-    update.mutate(form);
-  }
+  const isDirty = !!settings && JSON.stringify(form) !== JSON.stringify(settings);
 
-  const isDirty = settings && JSON.stringify(form) !== JSON.stringify(settings);
+  function handleSave() { update.mutate(form); }
 
   if (isLoading) {
-    return <p className="text-zinc-400 text-sm text-center py-8">加载中…</p>;
+    return <div className="text-center py-8 text-sm text-slate-400">加载中…</div>;
   }
+
+  const routingOptions = [
+    { value: "round-robin", label: "轮询", sub: "每次请求依次切换", icon: <Shuffle className="w-4 h-4" /> },
+    ...accounts.map((a) => ({
+      value: a.url,
+      label: `固定：${a.label}`,
+      sub: a.url,
+      icon: <Pin className="w-4 h-4" />,
+    })),
+  ];
 
   return (
     <div className="space-y-4">
-      <Card className="bg-zinc-900 border-zinc-700">
-        <CardHeader>
-          <CardTitle className="text-white">调用策略</CardTitle>
-          <CardDescription className="text-zinc-400">
-            选择轮询所有账号，或固定指向某一个账号
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Label className="text-zinc-300">路由方式</Label>
-          <Select
-            value={form.routingStrategy}
-            onValueChange={(v) => setForm((f) => ({ ...f, routingStrategy: v }))}
-          >
-            <SelectTrigger className="bg-zinc-800 border-zinc-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-600">
-              <SelectItem value="round-robin" className="text-white focus:bg-zinc-700">
-                🔀 轮询（Round Robin）
-              </SelectItem>
-              {accounts.map((acc) => (
-                <SelectItem key={acc.index} value={acc.url} className="text-white focus:bg-zinc-700">
-                  📌 固定：{acc.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {form.routingStrategy !== "round-robin" && (
-            <p className="text-xs text-zinc-500">
-              URL：{form.routingStrategy}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <Section title="调用策略" desc="控制请求如何分配到上游账号">
+        <div className="space-y-2">
+          {routingOptions.map((opt) => {
+            const active = form.routingStrategy === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setForm((f) => ({ ...f, routingStrategy: opt.value }))}
+                className={`w-full text-left p-3 rounded-lg border-2 transition-all flex items-center gap-3 ${
+                  active
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <div
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    active ? "bg-indigo-100 text-indigo-600" : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {opt.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-medium ${active ? "text-indigo-900" : "text-slate-700"}`}>
+                    {opt.label}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5 truncate font-mono">{opt.sub}</div>
+                </div>
+                {active && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
 
-      <Card className="bg-zinc-900 border-zinc-700">
-        <CardHeader>
-          <CardTitle className="text-white">缓存控制</CardTitle>
-          <CardDescription className="text-zinc-400">
-            注入 Anthropic Prompt Caching 相关字段（对非 Anthropic 上游透明传递）
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-zinc-300">缓存模式</Label>
-            <Select
+      <Section title="缓存控制" desc="Anthropic Prompt Caching 注入策略">
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" /> 缓存模式
+            </label>
+            <OptionGrid
+              options={CACHE_MODES.map((m) => ({ value: m.value, label: m.label, desc: m.desc }))}
               value={form.cacheMode}
-              onValueChange={(v) => setForm((f) => ({ ...f, cacheMode: v as Settings["cacheMode"] }))}
-            >
-              <SelectTrigger className="bg-zinc-800 border-zinc-600 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-800 border-zinc-600">
-                {Object.entries(CACHE_MODE_LABELS).map(([v, label]) => (
-                  <SelectItem key={v} value={v} className="text-white focus:bg-zinc-700">
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => setForm((f) => ({ ...f, cacheMode: v }))}
+            />
           </div>
 
           {form.cacheMode !== "none" && (
-            <div className="space-y-2">
-              <Label className="text-zinc-300">缓存时长（TTL）</Label>
-              <Select
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> 缓存时长
+              </label>
+              <OptionGrid
+                options={CACHE_TTLS}
                 value={form.cacheTTL}
-                onValueChange={(v) => setForm((f) => ({ ...f, cacheTTL: v as Settings["cacheTTL"] }))}
-              >
-                <SelectTrigger className="bg-zinc-800 border-zinc-600 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-800 border-zinc-600">
-                  {Object.entries(CACHE_TTL_LABELS).map(([v, label]) => (
-                    <SelectItem key={v} value={v} className="text-white focus:bg-zinc-700">
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(v) => setForm((f) => ({ ...f, cacheTTL: v }))}
+              />
               {form.cacheTTL === "1h" && (
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-amber-800 text-amber-200 text-xs">自动附加</Badge>
-                  <span className="text-xs text-zinc-500 font-mono">
-                    anthropic-beta: extended-cache-ttl-2025-04-11
-                  </span>
-                </div>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 mt-2 font-mono">
+                  ⓘ 自动附加 anthropic-beta: extended-cache-ttl-2025-04-11
+                </p>
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <Button
-        onClick={handleSave}
-        disabled={!isDirty || update.isPending}
-        className="w-full gap-2"
-      >
-        <Save className="w-4 h-4" />
-        {update.isPending ? "保存中…" : isDirty ? "保存更改" : "已是最新"}
-      </Button>
-      {update.isSuccess && (
-        <p className="text-green-400 text-sm text-center">✓ 已保存，立即生效</p>
-      )}
+      <div className="sticky bottom-4 bg-white border border-slate-200 rounded-xl p-3 shadow-lg flex items-center justify-between">
+        <span className="text-sm text-slate-600">
+          {update.isSuccess && !isDirty ? (
+            <span className="text-emerald-600 font-medium flex items-center gap-1.5">
+              <Check className="w-4 h-4" /> 已保存，立即生效
+            </span>
+          ) : isDirty ? (
+            <span className="text-amber-600">有未保存的更改</span>
+          ) : (
+            "所有更改已保存"
+          )}
+        </span>
+        <button
+          onClick={handleSave}
+          disabled={!isDirty || update.isPending}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Save className="w-4 h-4" />
+          {update.isPending ? "保存中…" : "保存更改"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,93 +1,118 @@
 import { useState } from "react";
-import { Plus, Trash2, Pin, PinOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogFooter, DialogTrigger,
-} from "@/components/ui/dialog";
+import { Plus, Trash2, Pin, PinOff, Server, Key, Tag, X } from "lucide-react";
 import {
   useAccounts, useAddAccount, useRemoveAccount, useSettings, useUpdateSettings,
   type AccountRow,
 } from "@/hooks/useAdmin";
 
-function AddAccountDialog({ onDone }: { onDone: () => void }) {
+function AddAccountForm({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
   const [label, setLabel] = useState("");
-  const [open, setOpen] = useState(false);
   const add = useAddAccount();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    add.mutate({ url, key, label: label || url }, {
-      onSuccess: () => { setUrl(""); setKey(""); setLabel(""); setOpen(false); onDone(); },
-    });
+    add.mutate(
+      { url: url.trim(), key: key.trim(), label: label.trim() || url.trim() },
+      {
+        onSuccess: () => {
+          setUrl(""); setKey(""); setLabel("");
+          onClose();
+        },
+      },
+    );
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1">
-          <Plus className="w-4 h-4" /> 添加账号
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-zinc-900 border-zinc-700 text-white">
-        <DialogHeader>
-          <DialogTitle>添加上游账号</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <Label className="text-zinc-300">别名（可选）</Label>
-            <Input
-              placeholder="My Account"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-zinc-300">上游 URL</Label>
-            <Input
-              placeholder="https://xxx.replit.dev/api"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              required
-              className="bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-zinc-300">上游 Key</Label>
-            <Input
-              type="password"
-              placeholder="sk-..."
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              required
-              className="bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={add.isPending}>
-              {add.isPending ? "添加中…" : "确认添加"}
-            </Button>
-          </DialogFooter>
-          {add.isError && (
-            <p className="text-red-400 text-sm">{(add.error as Error).message}</p>
-          )}
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form
+      onSubmit={handleSubmit}
+      className="bg-gradient-to-b from-indigo-50/50 to-white border-2 border-indigo-200 rounded-xl p-5 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-slate-900">添加新账号</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+          <Tag className="w-3.5 h-3.5" /> 别名（可选）
+        </label>
+        <input
+          type="text"
+          placeholder="例如：主账号、备用号"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-400"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+          <Server className="w-3.5 h-3.5" /> 上游 URL
+        </label>
+        <input
+          type="text"
+          placeholder="https://xxx.replit.dev/api"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          required
+          className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-400 font-mono"
+        />
+        <p className="text-xs text-slate-500">URL 末尾不要带斜杠</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+          <Key className="w-3.5 h-3.5" /> 上游 Key
+        </label>
+        <input
+          type="password"
+          placeholder="sk-..."
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          required
+          className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-400 font-mono"
+        />
+      </div>
+
+      {add.isError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+          {(add.error as Error).message}
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={add.isPending || !url.trim() || !key.trim()}
+          className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {add.isPending ? "添加中…" : "确认添加"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+        >
+          取消
+        </button>
+      </div>
+    </form>
   );
 }
 
-function AccountRow({ account }: { account: AccountRow }) {
+function AccountCard({ account }: { account: AccountRow }) {
   const remove = useRemoveAccount();
   const { data: settings } = useSettings();
   const update = useUpdateSettings();
+  const [confirming, setConfirming] = useState(false);
 
   const isPinned = settings?.routingStrategy === account.url;
 
@@ -98,77 +123,129 @@ function AccountRow({ account }: { account: AccountRow }) {
   }
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 hover:border-zinc-600 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-white truncate">{account.label}</span>
-          {isPinned && <Badge className="bg-blue-600 text-white text-xs">已固定</Badge>}
+    <div
+      className={`group relative bg-white border rounded-xl p-4 transition-all hover:shadow-md ${
+        isPinned ? "border-indigo-300 ring-1 ring-indigo-200" : "border-slate-200"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+            isPinned ? "bg-indigo-100 text-indigo-600" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          <Server className="w-5 h-5" />
         </div>
-        <div className="text-xs text-zinc-400 truncate mt-0.5">{account.url}</div>
-        <div className="text-xs text-zinc-500 mt-0.5 font-mono">{account.keyHint}</div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <Button
-          size="icon"
-          variant="ghost"
-          className={`w-8 h-8 ${isPinned ? "text-blue-400 hover:text-blue-300" : "text-zinc-400 hover:text-zinc-200"}`}
-          onClick={togglePin}
-          title={isPinned ? "取消固定，切换为轮询" : "固定此账号"}
-        >
-          {isPinned ? <Pin className="w-4 h-4" /> : <PinOff className="w-4 h-4" />}
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="w-8 h-8 text-zinc-400 hover:text-red-400"
-          onClick={() => remove.mutate(account.index)}
-          disabled={remove.isPending}
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-slate-900 truncate">{account.label}</span>
+            {isPinned && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-md">
+                <Pin className="w-3 h-3" /> 已固定
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-500 truncate mt-1 font-mono">
+            {account.url}
+          </div>
+          <div className="text-xs text-slate-400 mt-0.5 font-mono">
+            Key: {account.keyHint}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={togglePin}
+            title={isPinned ? "取消固定，切回轮询" : "固定到此账号"}
+            className={`p-2 rounded-lg transition-colors ${
+              isPinned
+                ? "text-indigo-600 hover:bg-indigo-50"
+                : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+            }`}
+          >
+            {isPinned ? <Pin className="w-4 h-4" /> : <PinOff className="w-4 h-4" />}
+          </button>
+          {!confirming ? (
+            <button
+              onClick={() => setConfirming(true)}
+              title="删除此账号"
+              className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { remove.mutate(account.index); setConfirming(false); }}
+                className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-md"
+              >
+                确认删除
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-md"
+              >
+                取消
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 export default function Accounts() {
-  const { data: accounts = [], isLoading, refetch } = useAccounts();
+  const { data: accounts = [], isLoading } = useAccounts();
   const { data: settings } = useSettings();
+  const [showForm, setShowForm] = useState(false);
 
   const strategy = settings?.routingStrategy ?? "round-robin";
   const isRoundRobin = strategy === "round-robin";
+  const pinnedAcc = accounts.find((a) => a.url === strategy);
 
   return (
     <div className="space-y-4">
-      <Card className="bg-zinc-900 border-zinc-700">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-white">上游账号</CardTitle>
-              <CardDescription className="text-zinc-400">
-                管理所有上游代理账号（URL + Key），{" "}
-                {isRoundRobin
-                  ? "当前策略：轮询所有账号"
-                  : `当前策略：固定到 ${accounts.find((a) => a.url === strategy)?.label ?? strategy}`}
-              </CardDescription>
-            </div>
-            <AddAccountDialog onDone={() => { void refetch(); }} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {isLoading && (
-            <p className="text-zinc-400 text-sm text-center py-4">加载中…</p>
-          )}
-          {!isLoading && accounts.length === 0 && (
-            <p className="text-zinc-500 text-sm text-center py-8">
-              暂无账号，点击右上角「添加账号」
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">上游账号</h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {isRoundRobin
+                ? `当前策略：轮询 · 共 ${accounts.length} 个账号`
+                : `当前策略：固定到 ${pinnedAcc?.label ?? "未知账号"}`}
             </p>
+          </div>
+          {!showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors shrink-0"
+            >
+              <Plus className="w-4 h-4" /> 添加账号
+            </button>
           )}
-          {accounts.map((acc) => (
-            <AccountRow key={acc.index} account={acc} />
-          ))}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {showForm && <AddAccountForm onClose={() => setShowForm(false)} />}
+
+      {isLoading && (
+        <div className="text-center py-8 text-sm text-slate-400">加载中…</div>
+      )}
+
+      {!isLoading && accounts.length === 0 && !showForm && (
+        <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl py-12 text-center">
+          <Server className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm text-slate-500">暂无账号</p>
+          <p className="text-xs text-slate-400 mt-1">点击上方「添加账号」开始</p>
+        </div>
+      )}
+
+      <div className="space-y-2.5">
+        {accounts.map((acc) => (
+          <AccountCard key={`${acc.index}-${acc.url}`} account={acc} />
+        ))}
+      </div>
     </div>
   );
 }
