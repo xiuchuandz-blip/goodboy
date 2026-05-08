@@ -16,11 +16,16 @@
 
 ## Where things live
 
-- `artifacts/api-server/src/routes/proxy.ts` — 核心代理逻辑
-- `artifacts/api-server/src/lib/upstreams.ts` — 多上游管理与路由策略
+- `artifacts/api-server/src/routes/proxy.ts` — 核心代理逻辑（含调用方鉴权 + 按密钥白名单选上游）
+- `artifacts/api-server/src/lib/state.ts` — 全局内存状态：上游账号、调用密钥、设置、统计
+- `artifacts/api-server/src/routes/admin.ts` — 上游账号 / 设置 / 统计 CRUD
+- `artifacts/api-server/src/routes/keys.ts` — 调用密钥 CRUD（生成、改名、改白名单、删除）
+- `artifacts/api-server/src/routes/auth.ts` — 管理员登录 `POST /api/auth/login`
+- `artifacts/api-server/src/middleware/adminAuth.ts` — `/api/admin/*` Bearer 鉴权
 - `artifacts/api-server/src/lib/keepalive.ts` — 定时 ping 防止上游睡眠
 - `artifacts/api-server/src/lib/cache.ts` — Anthropic 缓存控制注入
 - `artifacts/api-server/src/routes/health.ts` — 健康检查 `/api/healthz`
+- `artifacts/landing/src/pages/Keys.tsx` — 调用密钥管理页（新建/复制/编辑白名单/删除）
 
 ## Environment Variables
 
@@ -42,8 +47,9 @@
 
 ### 访问控制
 
-- `ACCESS_KEY` — 代理调用方鉴权（OpenAI 兼容接口）。不设置则完全开放；设置后调用方需在 Authorization 头中携带此 key
 - `ADMIN_PASSWORD` — **管理面板登录密码（必设）**。未设置时管理面板和 admin API 全部拒绝访问，前端显示登录页但无法登录
+- `ACCESS_KEY` — *(可选)* 代理调用方的预置 key，启动时自动加入密钥列表。也可不设，全部通过面板「密钥」页管理
+- 调用方鉴权规则：密钥列表为空时完全开放；只要存在任意密钥（环境变量或面板新增的），所有 `/v1/*` 请求都必须带匹配的 `Authorization: Bearer <key>`，并按密钥的「可调用上游」白名单路由
 
 ### Keepalive
 

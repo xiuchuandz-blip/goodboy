@@ -1,33 +1,44 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { Readable } from "stream";
 import { logger } from "../lib/logger";
-import { getNextAccount, type Account } from "../lib/state";
+import {
+  getNextAccount, findAccessKey, hasAnyAccessKey,
+  type Account, type AccessKey,
+} from "../lib/state";
 import { injectCacheControl, buildCacheHeaders } from "../lib/cache";
 import { createStatsInterceptor } from "../lib/stats-interceptor";
 
 const router: IRouter = Router();
 
-const accessKey = process.env["ACCESS_KEY"];
-if (!accessKey) logger.info("ACCESS_KEY is not set — proxy is open (no authentication required)");
-
-function checkConfig(_req: Request, res: Response, next: NextFunction) {
-  const account = getNextAccount();
-  if (!account) {
-    res.status(503).json({ error: "Proxy not configured: no accounts available" });
-    return;
-  }
-  res.locals["account"] = account;
-  next();
-}
-
 function checkAccessKey(req: Request, res: Response, next: NextFunction) {
-  if (!accessKey) { next(); return; }
+  // Open mode: no keys configured at all.
+  if (!hasAnyAccessKey()) { next(); return; }
+
   const auth = req.headers["authorization"] ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : auth.trim();
-  if (token !== accessKey) {
+  const token = (Array.isArray(auth) ? auth[0] ?? "" : auth);
+  const value = token.startsWith("Bearer ") ? token.slice(7).trim() : token.trim();
+
+  const matched = findAccessKey(value);
+  if (!matched) {
     res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
     return;
   }
+  res.locals["accessKey"] = matched;
+  next();
+}
+
+function pickAccount(_req: Request, res: Response, next: NextFunction) {
+  const matched = res.locals["accessKey"] as AccessKey | undefined;
+  const account = getNextAccount(matched?.allowedUpstreams ?? null);
+  if (!account) {
+    res.status(503).json({
+      error: Array.isArray(matched?.allowedUpstreams)
+        ? "No upstream account available for this key"
+        : "Proxy not configured: no accounts available",
+    });
+    return;
+  }
+  res.locals["account"] = account;
   next();
 }
 
@@ -48,7 +59,7 @@ const REVEALING_HEADERS = new Set([
   "x-request-id", "x-envoy-upstream-service-time", "x-robots-tag", "replit-cluster",
 ]);
 
-router.use("/v1", checkConfig, checkAccessKey, async (req: Request, res: Response) => {
+router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Response) => {
   const account = res.locals["account"] as Account;
 
   try {

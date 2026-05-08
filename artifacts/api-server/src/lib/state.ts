@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from "crypto";
 import { logger } from "./logger";
 
 export type CacheMode = "none" | "system-only" | "system+rolling";
@@ -21,6 +22,16 @@ export interface AccountStats {
   outputTokens: number;
   cacheWriteTokens: number;
   cacheHitTokens: number;
+}
+
+/** A caller-side API key. allowedUpstreams=null means "all accounts". */
+export interface AccessKey {
+  id: string;
+  name: string;
+  key: string;
+  /** List of account URLs this key may use. null = all accounts. */
+  allowedUpstreams: string[] | null;
+  createdAt: number;
 }
 
 function loadAccountsFromEnv(): Account[] {
@@ -53,8 +64,21 @@ function loadSettingsFromEnv(): Settings {
   };
 }
 
+function loadAccessKeysFromEnv(): AccessKey[] {
+  const envKey = process.env["ACCESS_KEY"];
+  if (!envKey) return [];
+  return [{
+    id: "env",
+    name: "环境变量 ACCESS_KEY",
+    key: envKey,
+    allowedUpstreams: null,
+    createdAt: Date.now(),
+  }];
+}
+
 let accounts: Account[] = loadAccountsFromEnv();
 let settings: Settings = loadSettingsFromEnv();
+let accessKeys: AccessKey[] = loadAccessKeysFromEnv();
 let rrIndex = 0;
 const statsMap = new Map<string, AccountStats>();
 
@@ -63,6 +87,14 @@ if (accounts.length === 0) {
 } else {
   logger.info({ count: accounts.length }, "Accounts loaded");
 }
+
+if (accessKeys.length === 0) {
+  logger.info("No access keys configured — proxy is open (no authentication required)");
+} else {
+  logger.info({ count: accessKeys.length }, "Access keys loaded");
+}
+
+// ---------- Accounts ----------
 
 export function getAccounts(): Account[] {
   return accounts.map((a) => ({ ...a }));
@@ -74,31 +106,55 @@ export function addAccount(a: Account): void {
 
 export function removeAccount(idx: number): boolean {
   if (idx < 0 || idx >= accounts.length) return false;
+  const removed = accounts[idx]!;
   accounts.splice(idx, 1);
+  // Remove this URL from any access key's allowedUpstreams.
+  for (const k of accessKeys) {
+    if (k.allowedUpstreams) {
+      k.allowedUpstreams = k.allowedUpstreams.filter((u) => u !== removed.url);
+    }
+  }
   return true;
 }
 
 export function updateAccount(idx: number, patch: Partial<Account>): boolean {
   const acc = accounts[idx];
   if (!acc) return false;
-  accounts[idx] = {
-    ...acc,
-    ...patch,
-    url: (patch.url ?? acc.url).replace(/\/$/, ""),
-  };
+  const newUrl = (patch.url ?? acc.url).replace(/\/$/, "");
+  // If URL changes, propagate the rename into any key allowedUpstreams.
+  if (newUrl !== acc.url) {
+    for (const k of accessKeys) {
+      if (k.allowedUpstreams) {
+        k.allowedUpstreams = k.allowedUpstreams.map((u) => (u === acc.url ? newUrl : u));
+      }
+    }
+  }
+  accounts[idx] = { ...acc, ...patch, url: newUrl };
   return true;
 }
 
-export function getNextAccount(): Account | null {
-  if (accounts.length === 0) return null;
-  const strategy = settings.routingStrategy;
-  if (strategy === "round-robin") {
-    const acc = accounts[rrIndex % accounts.length]!;
-    rrIndex++;
-    return acc;
+/** Pick the next account, optionally restricted to a whitelist of URLs. */
+export function getNextAccount(allowedUrls?: string[] | null): Account | null {
+  let pool = accounts;
+  // null/undefined = unrestricted; an array (even empty) is a strict whitelist
+  if (Array.isArray(allowedUrls)) {
+    pool = accounts.filter((a) => allowedUrls.includes(a.url));
   }
-  return accounts.find((a) => a.url === strategy) ?? accounts[0] ?? null;
+  if (pool.length === 0) return null;
+
+  const strategy = settings.routingStrategy;
+  if (strategy !== "round-robin") {
+    const pinned = pool.find((a) => a.url === strategy);
+    if (pinned) return pinned;
+    // Pinned account not in the key's whitelist — fall back to round-robin within pool.
+  }
+
+  const acc = pool[rrIndex % pool.length]!;
+  rrIndex++;
+  return acc;
 }
+
+// ---------- Settings ----------
 
 export function getSettings(): Settings {
   return { ...settings };
@@ -107,6 +163,63 @@ export function getSettings(): Settings {
 export function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch };
 }
+
+// ---------- Access Keys ----------
+
+export function getAccessKeys(): AccessKey[] {
+  return accessKeys.map((k) => ({ ...k }));
+}
+
+/** Find key by token value. Returns the matching entry or null. */
+export function findAccessKey(token: string): AccessKey | null {
+  if (!token) return null;
+  return accessKeys.find((k) => k.key === token) ?? null;
+}
+
+export function hasAnyAccessKey(): boolean {
+  return accessKeys.length > 0;
+}
+
+function generateKey(): string {
+  return "sk-proxy-" + randomBytes(24).toString("base64url");
+}
+
+export interface CreateKeyInput {
+  name: string;
+  key?: string;
+  allowedUpstreams?: string[] | null;
+}
+
+export function addAccessKey(input: CreateKeyInput): AccessKey {
+  const entry: AccessKey = {
+    id: randomUUID(),
+    name: input.name.trim() || "未命名密钥",
+    key: input.key?.trim() || generateKey(),
+    allowedUpstreams: input.allowedUpstreams ?? null,
+    createdAt: Date.now(),
+  };
+  accessKeys.push(entry);
+  return entry;
+}
+
+export function updateAccessKey(
+  id: string,
+  patch: Partial<Pick<AccessKey, "name" | "allowedUpstreams">>,
+): boolean {
+  const k = accessKeys.find((x) => x.id === id);
+  if (!k) return false;
+  if (patch.name !== undefined) k.name = patch.name.trim() || k.name;
+  if (patch.allowedUpstreams !== undefined) k.allowedUpstreams = patch.allowedUpstreams;
+  return true;
+}
+
+export function removeAccessKey(id: string): boolean {
+  const before = accessKeys.length;
+  accessKeys = accessKeys.filter((k) => k.id !== id);
+  return accessKeys.length < before;
+}
+
+// ---------- Stats ----------
 
 function emptyStats(): AccountStats {
   return { requests: 0, inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheHitTokens: 0 };

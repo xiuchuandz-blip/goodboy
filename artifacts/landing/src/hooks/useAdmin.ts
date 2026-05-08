@@ -103,3 +103,55 @@ export function useResetStats() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["stats"] }); },
   });
 }
+
+// ---------- Access keys ----------
+
+export interface AccessKeyRow {
+  id: string;
+  name: string;
+  keyHint: string;
+  allowedUpstreams: string[] | null;
+  createdAt: number;
+  isEnvKey: boolean;
+}
+
+export interface CreatedKey {
+  id: string;
+  name: string;
+  key: string;
+  allowedUpstreams: string[] | null;
+  createdAt: number;
+}
+
+export function useAccessKeys() {
+  return useQuery<AccessKeyRow[]>({
+    queryKey: ["accessKeys"],
+    queryFn: () => apiFetch<AccessKeyRow[]>("/keys"),
+  });
+}
+
+export function useAddAccessKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; key?: string; allowedUpstreams: string[] | null }) =>
+      apiFetch<CreatedKey>("/keys", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
+  });
+}
+
+export function useUpdateAccessKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; name?: string; allowedUpstreams?: string[] | null }) =>
+      apiFetch(`/keys/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
+  });
+}
+
+export function useRemoveAccessKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/keys/${id}`, { method: "DELETE" }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
+  });
+}

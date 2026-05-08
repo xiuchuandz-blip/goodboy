@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Users, Settings2, BarChart3, Zap, LogOut } from "lucide-react";
+import { Users, Settings2, BarChart3, Zap, LogOut, KeyRound } from "lucide-react";
 import Accounts from "@/pages/Accounts";
 import SettingsPage from "@/pages/Settings";
 import Stats from "@/pages/Stats";
+import Keys from "@/pages/Keys";
 import Login from "@/pages/Login";
 import { clearToken, getToken } from "@/lib/auth";
 
@@ -13,6 +14,7 @@ const queryClient = new QueryClient({
 
 const TABS = [
   { id: "accounts", label: "账号", icon: Users },
+  { id: "keys", label: "密钥", icon: KeyRound },
   { id: "settings", label: "设置", icon: Settings2 },
   { id: "stats", label: "统计", icon: BarChart3 },
 ] as const;
@@ -74,6 +76,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
 
         {tab === "accounts" && <Accounts />}
+        {tab === "keys" && <Keys />}
         {tab === "settings" && <SettingsPage />}
         {tab === "stats" && <Stats />}
       </div>
