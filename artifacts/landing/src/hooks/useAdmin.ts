@@ -1,12 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getToken, clearToken, AuthError } from "@/lib/auth";
 
 const BASE = "/api/admin";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event("admin-unauthorized"));
+    throw new AuthError();
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
     throw new Error(err.error ?? res.statusText);
