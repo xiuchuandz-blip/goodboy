@@ -42,7 +42,8 @@
 
 ### 访问控制
 
-- `ACCESS_KEY` — 不设置则完全开放；设置后调用方需在 Authorization 头中携带此 key
+- `ACCESS_KEY` — 代理调用方鉴权（OpenAI 兼容接口）。不设置则完全开放；设置后调用方需在 Authorization 头中携带此 key
+- `ADMIN_PASSWORD` — **管理面板登录密码（必设）**。未设置时管理面板和 admin API 全部拒绝访问，前端显示登录页但无法登录
 
 ### Keepalive
 
@@ -63,7 +64,8 @@
 
 ## User preferences
 
-- 对外不需要鉴权，拿到本项目 URL 即可使用
+- 代理接口对外不需要鉴权（`ACCESS_KEY` 留空），拿到本项目 URL 即可使用
+- 管理面板必须设密码（`ADMIN_PASSWORD`），在 Zeabur 控制台配置
 
 ## Gotchas
 
