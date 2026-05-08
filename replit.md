@@ -17,7 +17,8 @@
 ## Where things live
 
 - `artifacts/api-server/src/routes/proxy.ts` — 核心代理逻辑（含调用方鉴权 + 按密钥白名单选上游）
-- `artifacts/api-server/src/lib/state.ts` — 全局内存状态：上游账号、调用密钥、设置、统计
+- `artifacts/api-server/src/lib/state.ts` — 全局状态：上游账号、调用密钥、设置、统计（每次写操作落盘到 `./data/state.json`）
+- `artifacts/api-server/src/lib/persistence.ts` — JSON 文件持久化（启动时加载 + 原子写）
 - `artifacts/api-server/src/routes/admin.ts` — 上游账号 / 设置 / 统计 CRUD
 - `artifacts/api-server/src/routes/keys.ts` — 调用密钥 CRUD（生成、改名、改白名单、删除）
 - `artifacts/api-server/src/routes/auth.ts` — 管理员登录 `POST /api/auth/login`
@@ -79,6 +80,7 @@
 - UPSTREAM_URL / UPSTREAM_URLS 不要带末尾斜杠
 - 修改代理配置后需要重新 build 并重启 workflow
 - CACHE_MODE=system+rolling 会修改请求体，仅对 Anthropic 兼容上游有效
+- **持久化目录** `./data/`（相对 api-server cwd）：Zeabur 重新部署时容器是新的，**这个目录会被清空**。要么挂 Volume 到该路径，要么部署前先在面板「设置 → 备份与恢复」导出 JSON，部署后再导入恢复。可用 `DATA_DIR` 环境变量改路径。
 
 ## Pointers
 

@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
-import { Save, Check, Shuffle, Pin, Database, Clock } from "lucide-react";
-import { useSettings, useUpdateSettings, useAccounts, type Settings } from "@/hooks/useAdmin";
+import { useEffect, useRef, useState } from "react";
+import { Save, Check, Shuffle, Pin, Database, Clock, Download, Upload, AlertTriangle } from "lucide-react";
+import {
+  useSettings, useUpdateSettings, useAccounts,
+  downloadExport, useImport,
+  type Settings,
+} from "@/hooks/useAdmin";
 
 const CACHE_MODES: { value: Settings["cacheMode"]; label: string; desc: string }[] = [
   { value: "none", label: "不启用", desc: "不修改请求体" },
@@ -62,6 +66,148 @@ function OptionGrid<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+function BackupSection() {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ payload: unknown; summary: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importMut = useImport();
+
+  async function handleExport() {
+    setError(null);
+    setExporting(true);
+    try {
+      await downloadExport();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleFile(file: File) {
+    setError(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as {
+        version?: number;
+        accounts?: unknown[];
+        accessKeys?: unknown[];
+      };
+      if (payload.version !== 1) {
+        throw new Error("文件版本不支持，应为 version=1 的备份");
+      }
+      const accounts = Array.isArray(payload.accounts) ? payload.accounts.length : 0;
+      const keys = Array.isArray(payload.accessKeys) ? payload.accessKeys.length : 0;
+      setPending({
+        payload,
+        summary: `备份内含：${accounts} 个上游账号、${keys} 个调用密钥`,
+      });
+    } catch (e) {
+      setError(`解析失败：${(e as Error).message}`);
+    }
+  }
+
+  function doImport(merge: boolean) {
+    if (!pending) return;
+    importMut.mutate(
+      { payload: pending.payload, merge },
+      {
+        onSuccess: () => {
+          setPending(null);
+          if (fileInput.current) fileInput.current.value = "";
+        },
+        onError: (e) => setError((e as Error).message),
+      },
+    );
+  }
+
+  return (
+    <Section title="备份与恢复" desc="导出全部账号、密钥、设置为 JSON 文件；可在新部署里导入还原">
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? "导出中…" : "导出 JSON"}
+          </button>
+          <button
+            onClick={() => fileInput.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg"
+          >
+            <Upload className="w-4 h-4" />
+            选择文件导入…
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleFile(f);
+            }}
+          />
+        </div>
+
+        <p className="text-xs text-slate-500">
+          ⓘ 数据持久化到容器内 <code className="px-1 py-0.5 bg-slate-100 rounded font-mono">./data/state.json</code>。
+          如部署在容器化环境（如 Zeabur），重新部署或容器重建会丢失数据 —— 建议定期导出 JSON 备份，或为该路径挂载 Volume。
+        </p>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+            {error}
+          </div>
+        )}
+
+        {pending && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 text-sm">
+                <p className="font-semibold text-amber-900">确认导入</p>
+                <p className="text-amber-800 text-xs mt-0.5">{pending.summary}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                onClick={() => doImport(false)}
+                disabled={importMut.isPending}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-md disabled:opacity-50"
+              >
+                {importMut.isPending ? "处理中…" : "覆盖全部（清空当前数据）"}
+              </button>
+              <button
+                onClick={() => doImport(true)}
+                disabled={importMut.isPending}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md disabled:opacity-50"
+              >
+                {importMut.isPending ? "处理中…" : "合并（保留现有，追加新的）"}
+              </button>
+              <button
+                onClick={() => { setPending(null); if (fileInput.current) fileInput.current.value = ""; }}
+                className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-md"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
+        {importMut.isSuccess && !pending && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
+            ✓ 导入成功 · 新增 {importMut.data.accountsAdded} 个账号、{importMut.data.keysAdded} 个密钥
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -131,6 +277,8 @@ export default function SettingsPage() {
           })}
         </div>
       </Section>
+
+      <BackupSection />
 
       <Section title="缓存控制" desc="Anthropic Prompt Caching 注入策略">
         <div className="space-y-4">

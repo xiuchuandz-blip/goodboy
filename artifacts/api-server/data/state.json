@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "accounts": [
+    {
+      "url": "https://12604020-16d8-4c3a-905d-947b419f5ab8-00-2pyewmetble9b.worf.replit.dev",
+      "key": "092896a46fd5b28de03bff5a94c7e57aa06326c52dfede9e9a71b7681b1ba917",
+      "label": "Default"
+    }
+  ],
+  "accessKeys": [],
+  "settings": {
+    "cacheMode": "none",
+    "cacheTTL": "5m",
+    "routingStrategy": "round-robin"
+  },
+  "stats": {}
+}

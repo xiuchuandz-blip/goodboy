@@ -3,6 +3,7 @@ import {
   getAccounts, addAccount, removeAccount, updateAccount,
   getSettings, updateSettings,
   getStats, resetStats,
+  exportAll, importAll,
   type Account, type Settings,
 } from "../lib/state";
 
@@ -60,6 +61,25 @@ router.get("/stats", (_req, res) => {
 router.post("/stats/reset", (_req, res) => {
   resetStats();
   res.json({ ok: true });
+});
+
+router.get("/export", (_req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="proxy-backup-${new Date().toISOString().slice(0, 10)}.json"`,
+  );
+  res.send(JSON.stringify(exportAll(), null, 2));
+});
+
+router.post("/import", (req, res) => {
+  try {
+    const merge = req.query["merge"] === "true";
+    const result = importAll(req.body, { merge });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
 });
 
 export default router;

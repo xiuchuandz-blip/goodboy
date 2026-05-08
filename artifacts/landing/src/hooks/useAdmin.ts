@@ -146,3 +146,55 @@ export function useRemoveAccessKey() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
   });
 }
+
+// ---------- Export / Import ----------
+
+export async function downloadExport(): Promise<void> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/export`, { headers });
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event("admin-unauthorized"));
+    throw new AuthError();
+  }
+  if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") ?? "";
+  const m = cd.match(/filename="([^"]+)"/);
+  const filename = m?.[1] ?? `proxy-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export interface ImportResult {
+  ok: true;
+  accountsAdded: number;
+  keysAdded: number;
+}
+
+export function useImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, merge }: { payload: unknown; merge: boolean }) =>
+      apiFetch<ImportResult>(`/import?merge=${merge}`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["accounts"] });
+      void qc.invalidateQueries({ queryKey: ["accessKeys"] });
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+      void qc.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}

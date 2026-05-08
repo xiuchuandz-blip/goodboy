@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "crypto";
 import { logger } from "./logger";
+import { loadSnapshot, saveSnapshot, type Snapshot } from "./persistence";
 
 export type CacheMode = "none" | "system-only" | "system+rolling";
 export type CacheTTL = "5m" | "1h";
@@ -64,19 +65,60 @@ function loadSettingsFromEnv(): Settings {
   };
 }
 
-let accounts: Account[] = loadAccountsFromEnv();
+let accounts: Account[] = [];
 let settings: Settings = loadSettingsFromEnv();
 let accessKeys: AccessKey[] = [];
 let rrIndex = 0;
-const statsMap = new Map<string, AccountStats>();
+let statsMap = new Map<string, AccountStats>();
+
+// ---- Boot: load disk snapshot if present, else fall back to env ----
+
+function applySnapshot(snap: Snapshot): void {
+  accounts = (snap.accounts as Account[]).map((a) => ({
+    url: String(a.url ?? "").replace(/\/$/, ""),
+    key: String(a.key ?? ""),
+    label: String(a.label ?? a.url ?? ""),
+  }));
+  accessKeys = (snap.accessKeys as AccessKey[]).map((k) => ({
+    id: String(k.id ?? randomUUID()),
+    name: String(k.name ?? "未命名"),
+    key: String(k.key ?? generateKey()),
+    allowedUpstreams: Array.isArray(k.allowedUpstreams) ? k.allowedUpstreams.map(String) : null,
+    createdAt: Number(k.createdAt ?? Date.now()),
+  }));
+  if (snap.settings && typeof snap.settings === "object") {
+    settings = { ...settings, ...(snap.settings as Partial<Settings>) };
+  }
+  statsMap = new Map(Object.entries((snap.stats ?? {}) as Record<string, AccountStats>));
+}
+
+const initial = loadSnapshot();
+if (initial) {
+  applySnapshot(initial);
+} else {
+  accounts = loadAccountsFromEnv();
+  if (accounts.length > 0) logger.info({ count: accounts.length }, "Accounts seeded from env (no state.json yet)");
+}
 
 if (accounts.length === 0) {
   logger.warn("No accounts configured — proxy will return 503");
 } else {
-  logger.info({ count: accounts.length }, "Accounts loaded");
+  logger.info({ count: accounts.length }, "Accounts ready");
+}
+logger.info({ count: accessKeys.length }, "Access keys ready (managed via admin panel)");
+
+function persist(): void {
+  saveSnapshot({
+    version: 1,
+    accounts,
+    accessKeys,
+    settings,
+    stats: Object.fromEntries(statsMap),
+  });
 }
 
-logger.info("Access keys: managed via admin panel only; proxy denies all calls until at least one key is created");
+// Save once at boot to materialize the file when first run.
+persist();
 
 // ---------- Accounts ----------
 
@@ -86,18 +128,19 @@ export function getAccounts(): Account[] {
 
 export function addAccount(a: Account): void {
   accounts.push({ ...a, url: a.url.replace(/\/$/, "") });
+  persist();
 }
 
 export function removeAccount(idx: number): boolean {
   if (idx < 0 || idx >= accounts.length) return false;
   const removed = accounts[idx]!;
   accounts.splice(idx, 1);
-  // Remove this URL from any access key's allowedUpstreams.
   for (const k of accessKeys) {
     if (k.allowedUpstreams) {
       k.allowedUpstreams = k.allowedUpstreams.filter((u) => u !== removed.url);
     }
   }
+  persist();
   return true;
 }
 
@@ -105,7 +148,6 @@ export function updateAccount(idx: number, patch: Partial<Account>): boolean {
   const acc = accounts[idx];
   if (!acc) return false;
   const newUrl = (patch.url ?? acc.url).replace(/\/$/, "");
-  // If URL changes, propagate the rename into any key allowedUpstreams.
   if (newUrl !== acc.url) {
     for (const k of accessKeys) {
       if (k.allowedUpstreams) {
@@ -114,13 +156,13 @@ export function updateAccount(idx: number, patch: Partial<Account>): boolean {
     }
   }
   accounts[idx] = { ...acc, ...patch, url: newUrl };
+  persist();
   return true;
 }
 
 /** Pick the next account, optionally restricted to a whitelist of URLs. */
 export function getNextAccount(allowedUrls?: string[] | null): Account | null {
   let pool = accounts;
-  // null/undefined = unrestricted; an array (even empty) is a strict whitelist
   if (Array.isArray(allowedUrls)) {
     pool = accounts.filter((a) => allowedUrls.includes(a.url));
   }
@@ -130,7 +172,6 @@ export function getNextAccount(allowedUrls?: string[] | null): Account | null {
   if (strategy !== "round-robin") {
     const pinned = pool.find((a) => a.url === strategy);
     if (pinned) return pinned;
-    // Pinned account not in the key's whitelist — fall back to round-robin within pool.
   }
 
   const acc = pool[rrIndex % pool.length]!;
@@ -146,6 +187,7 @@ export function getSettings(): Settings {
 
 export function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch };
+  persist();
 }
 
 // ---------- Access Keys ----------
@@ -154,7 +196,6 @@ export function getAccessKeys(): AccessKey[] {
   return accessKeys.map((k) => ({ ...k }));
 }
 
-/** Find key by token value. Returns the matching entry or null. */
 export function findAccessKey(token: string): AccessKey | null {
   if (!token) return null;
   return accessKeys.find((k) => k.key === token) ?? null;
@@ -179,6 +220,7 @@ export function addAccessKey(input: CreateKeyInput): AccessKey {
     createdAt: Date.now(),
   };
   accessKeys.push(entry);
+  persist();
   return entry;
 }
 
@@ -190,13 +232,16 @@ export function updateAccessKey(
   if (!k) return false;
   if (patch.name !== undefined) k.name = patch.name.trim() || k.name;
   if (patch.allowedUpstreams !== undefined) k.allowedUpstreams = patch.allowedUpstreams;
+  persist();
   return true;
 }
 
 export function removeAccessKey(id: string): boolean {
   const before = accessKeys.length;
   accessKeys = accessKeys.filter((k) => k.id !== id);
-  return accessKeys.length < before;
+  const changed = accessKeys.length < before;
+  if (changed) persist();
+  return changed;
 }
 
 // ---------- Stats ----------
@@ -214,6 +259,17 @@ export function recordStats(url: string, patch: Partial<AccountStats>): void {
     cacheWriteTokens: existing.cacheWriteTokens + (patch.cacheWriteTokens ?? 0),
     cacheHitTokens: existing.cacheHitTokens + (patch.cacheHitTokens ?? 0),
   });
+  // Stats persisted lazily — see persistStatsSoon below.
+  persistStatsSoon();
+}
+
+let statsPersistTimer: NodeJS.Timeout | null = null;
+function persistStatsSoon(): void {
+  if (statsPersistTimer) return;
+  statsPersistTimer = setTimeout(() => {
+    statsPersistTimer = null;
+    persist();
+  }, 5_000);
 }
 
 export function getStats(): Record<string, AccountStats & { label: string }> {
@@ -226,4 +282,95 @@ export function getStats(): Record<string, AccountStats & { label: string }> {
 
 export function resetStats(): void {
   statsMap.clear();
+  persist();
+}
+
+// ---------- Export / Import ----------
+
+export interface ExportPayload {
+  version: 1;
+  exportedAt: number;
+  accounts: Account[];
+  accessKeys: AccessKey[];
+  settings: Settings;
+  stats: Record<string, AccountStats>;
+}
+
+export function exportAll(): ExportPayload {
+  return {
+    version: 1,
+    exportedAt: Date.now(),
+    accounts: getAccounts(),
+    accessKeys: getAccessKeys(),
+    settings: getSettings(),
+    stats: Object.fromEntries(statsMap),
+  };
+}
+
+export interface ImportOptions {
+  /** If true, merge into existing state. If false (default), replace everything. */
+  merge?: boolean;
+}
+
+export interface ImportResult {
+  ok: true;
+  accountsAdded: number;
+  keysAdded: number;
+}
+
+export function importAll(payload: unknown, opts: ImportOptions = {}): ImportResult {
+  const data = payload as Partial<ExportPayload>;
+  if (!data || typeof data !== "object") throw new Error("payload 必须是对象");
+  if (data.version !== 1) throw new Error(`不支持的版本：${String(data.version)}`);
+
+  const incomingAccounts: Account[] = Array.isArray(data.accounts)
+    ? data.accounts.map((a) => ({
+        url: String(a.url ?? "").replace(/\/$/, ""),
+        key: String(a.key ?? ""),
+        label: String(a.label ?? a.url ?? ""),
+      })).filter((a) => a.url && a.key)
+    : [];
+
+  const incomingKeys: AccessKey[] = Array.isArray(data.accessKeys)
+    ? data.accessKeys.map((k) => ({
+        id: String(k.id ?? randomUUID()),
+        name: String(k.name ?? "未命名"),
+        key: String(k.key ?? generateKey()),
+        allowedUpstreams: Array.isArray(k.allowedUpstreams) ? k.allowedUpstreams.map(String) : null,
+        createdAt: Number(k.createdAt ?? Date.now()),
+      }))
+    : [];
+
+  const incomingSettings = (data.settings && typeof data.settings === "object")
+    ? data.settings as Partial<Settings>
+    : null;
+
+  let added = { accounts: 0, keys: 0 };
+
+  if (opts.merge) {
+    for (const a of incomingAccounts) {
+      if (!accounts.some((x) => x.url === a.url)) {
+        accounts.push(a);
+        added.accounts++;
+      }
+    }
+    for (const k of incomingKeys) {
+      if (!accessKeys.some((x) => x.key === k.key)) {
+        accessKeys.push(k);
+        added.keys++;
+      }
+    }
+    if (incomingSettings) settings = { ...settings, ...incomingSettings };
+  } else {
+    accounts = incomingAccounts;
+    accessKeys = incomingKeys;
+    if (incomingSettings) settings = { ...settings, ...incomingSettings };
+    if (data.stats && typeof data.stats === "object") {
+      statsMap = new Map(Object.entries(data.stats as Record<string, AccountStats>));
+    }
+    added = { accounts: incomingAccounts.length, keys: incomingKeys.length };
+  }
+
+  persist();
+  return { ok: true, accountsAdded: added.accounts, keysAdded: added.keys };
 }
