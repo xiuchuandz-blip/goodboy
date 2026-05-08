@@ -37,22 +37,19 @@ app.use("/api", router);
 // Also expose proxy at root /v1/* so callers using base URL without /api prefix still work
 app.use(proxyRouter);
 
-// In production, serve the built frontend static files for all other routes
-if (process.env["NODE_ENV"] === "production") {
-  // import.meta.dirname is artifacts/api-server/dist at runtime
-  const frontendDist = path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    "../../landing/dist/public",
-  );
-  if (existsSync(frontendDist)) {
-    app.use(express.static(frontendDist));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(frontendDist, "index.html"));
-    });
-    logger.info({ frontendDist }, "Serving frontend static files");
-  } else {
-    logger.warn({ frontendDist }, "Frontend dist not found, skipping static serving");
-  }
+// Serve the built frontend static files for all other routes (if dist exists)
+const frontendDist = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../landing/dist/public",
+);
+if (existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+  logger.info({ frontendDist }, "Serving frontend static files");
+} else {
+  logger.warn({ frontendDist }, "Frontend dist not found, skipping static serving");
 }
 
 export default app;
