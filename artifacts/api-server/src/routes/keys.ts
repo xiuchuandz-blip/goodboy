@@ -5,11 +5,6 @@ import {
 
 const router: IRouter = Router();
 
-function maskKey(k: string): string {
-  if (k.length <= 8) return "****";
-  return `${k.slice(0, 8)}…${k.slice(-4)}`;
-}
-
 /** Validate allowedUpstreams: must be null or an array of unique strings. */
 function normalizeAllowed(v: unknown): { ok: true; value: string[] | null } | { ok: false; error: string } {
   if (v === null || v === undefined) return { ok: true, value: null };
@@ -21,16 +16,7 @@ function normalizeAllowed(v: unknown): { ok: true; value: string[] | null } | { 
 }
 
 router.get("/", (_req, res) => {
-  res.json(
-    getAccessKeys().map((k) => ({
-      id: k.id,
-      name: k.name,
-      keyHint: maskKey(k.key),
-      allowedUpstreams: k.allowedUpstreams,
-      createdAt: k.createdAt,
-      isEnvKey: k.id === "env",
-    })),
-  );
+  res.json(getAccessKeys());
 });
 
 router.post("/", (req, res) => {
@@ -50,22 +36,11 @@ router.post("/", (req, res) => {
     key: body.key,
     allowedUpstreams: norm.value,
   });
-  // Return the FULL key once (only chance to copy it).
-  res.json({
-    id: created.id,
-    name: created.name,
-    key: created.key,
-    allowedUpstreams: created.allowedUpstreams,
-    createdAt: created.createdAt,
-  });
+  res.json(created);
 });
 
 router.patch("/:id", (req, res) => {
   const id = req.params["id"]!;
-  if (id === "env") {
-    res.status(400).json({ error: "环境变量 ACCESS_KEY 来源的密钥不可修改，请删除环境变量后改用面板管理" });
-    return;
-  }
   const body = req.body as {
     name?: string;
     allowedUpstreams?: string[] | null;
@@ -84,10 +59,6 @@ router.patch("/:id", (req, res) => {
 
 router.delete("/:id", (req, res) => {
   const id = req.params["id"]!;
-  if (id === "env") {
-    res.status(400).json({ error: "环境变量 ACCESS_KEY 来源的密钥不可删除，请清空环境变量后重启" });
-    return;
-  }
   const ok = removeAccessKey(id);
   if (!ok) { res.status(404).json({ error: "密钥不存在" }); return; }
   res.json({ ok: true });

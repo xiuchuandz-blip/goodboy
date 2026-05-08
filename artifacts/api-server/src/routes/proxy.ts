@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { Readable } from "stream";
 import { logger } from "../lib/logger";
 import {
-  getNextAccount, findAccessKey, hasAnyAccessKey,
+  getNextAccount, findAccessKey,
   type Account, type AccessKey,
 } from "../lib/state";
 import { injectCacheControl, buildCacheHeaders } from "../lib/cache";
@@ -11,9 +11,6 @@ import { createStatsInterceptor } from "../lib/stats-interceptor";
 const router: IRouter = Router();
 
 function checkAccessKey(req: Request, res: Response, next: NextFunction) {
-  // Open mode: no keys configured at all.
-  if (!hasAnyAccessKey()) { next(); return; }
-
   const auth = req.headers["authorization"] ?? "";
   const token = (Array.isArray(auth) ? auth[0] ?? "" : auth);
   const value = token.startsWith("Bearer ") ? token.slice(7).trim() : token.trim();

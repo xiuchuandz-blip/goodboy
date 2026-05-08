@@ -109,15 +109,6 @@ export function useResetStats() {
 export interface AccessKeyRow {
   id: string;
   name: string;
-  keyHint: string;
-  allowedUpstreams: string[] | null;
-  createdAt: number;
-  isEnvKey: boolean;
-}
-
-export interface CreatedKey {
-  id: string;
-  name: string;
   key: string;
   allowedUpstreams: string[] | null;
   createdAt: number;
@@ -134,7 +125,7 @@ export function useAddAccessKey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { name: string; key?: string; allowedUpstreams: string[] | null }) =>
-      apiFetch<CreatedKey>("/keys", { method: "POST", body: JSON.stringify(data) }),
+      apiFetch<AccessKeyRow>("/keys", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
   });
 }

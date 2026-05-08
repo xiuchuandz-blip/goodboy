@@ -1,7 +1,5 @@
 import { useState, type FormEvent } from "react";
-import {
-  Plus, Trash2, KeyRound, Copy, Check, X, Server, ShieldCheck, Lock,
-} from "lucide-react";
+import { Plus, Trash2, KeyRound, Copy, Check, X, Server } from "lucide-react";
 import {
   useAccessKeys, useAddAccessKey, useUpdateAccessKey, useRemoveAccessKey,
   useAccounts,
@@ -23,7 +21,7 @@ function CopyButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-white border border-slate-300 hover:bg-slate-50 rounded-md text-slate-600"
+      className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-white border border-slate-300 hover:bg-slate-50 rounded-md text-slate-600 shrink-0"
     >
       {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
       {copied ? "已复制" : "复制"}
@@ -101,7 +99,6 @@ function UpstreamPicker({
 function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: () => void }) {
   const [name, setName] = useState("");
   const [allowed, setAllowed] = useState<string[] | null>(null);
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
   const add = useAddAccessKey();
   const emptyWhitelist = Array.isArray(allowed) && allowed.length === 0;
 
@@ -110,35 +107,7 @@ function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: ()
     if (!name.trim() || emptyWhitelist) return;
     add.mutate(
       { name: name.trim(), allowedUpstreams: allowed },
-      {
-        onSuccess: (data) => setCreatedKey(data.key),
-      },
-    );
-  }
-
-  if (createdKey) {
-    return (
-      <div className="bg-gradient-to-b from-emerald-50 to-white border-2 border-emerald-200 rounded-xl p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-emerald-600" />
-          <h3 className="font-semibold text-slate-900">密钥已生成</h3>
-        </div>
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-          ⚠ 请立即复制下方密钥，关闭后将无法再次完整查看
-        </p>
-        <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-emerald-300 break-all">
-          {createdKey}
-        </div>
-        <div className="flex gap-2">
-          <CopyButton value={createdKey} />
-          <button
-            onClick={onClose}
-            className="ml-auto px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
-          >
-            完成
-          </button>
-        </div>
-      </div>
+      { onSuccess: () => onClose() },
     );
   }
 
@@ -178,7 +147,7 @@ function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: ()
 
       {emptyWhitelist && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-          ⚠ 已选择「仅指定账号」但未勾选任何上游 — 该密钥将无法调用任何上游。请至少勾选一个账号，或切换为「全部上游账号」。
+          ⚠ 「仅指定账号」模式下未勾选任何上游 — 该密钥将无法调用任何上游。
         </div>
       )}
 
@@ -214,6 +183,8 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string[] | null>(k.allowedUpstreams);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(k.name);
 
   const allCount = accounts.length;
   const allowedLabel =
@@ -223,11 +194,20 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
 
   const draftEmpty = Array.isArray(draft) && draft.length === 0;
 
-  function save() {
+  function savePerms() {
     if (draftEmpty) return;
     update.mutate(
       { id: k.id, allowedUpstreams: draft },
       { onSuccess: () => setEditing(false) },
+    );
+  }
+
+  function saveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === k.name) { setRenaming(false); return; }
+    update.mutate(
+      { id: k.id, name: trimmed },
+      { onSuccess: () => setRenaming(false) },
     );
   }
 
@@ -238,20 +218,51 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
           <KeyRound className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-slate-900 truncate">{k.name}</span>
-            {k.isEnvKey && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-md">
-                <Lock className="w-3 h-3" /> 环境变量
-              </span>
-            )}
+          {renaming ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveName();
+                  else if (e.key === "Escape") { setNameDraft(k.name); setRenaming(false); }
+                }}
+                autoFocus
+                className="px-2 py-0.5 text-sm font-semibold bg-white border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                onClick={saveName}
+                className="px-2 py-0.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => { setNameDraft(k.name); setRenaming(false); }}
+                className="px-2 py-0.5 text-xs bg-white border border-slate-300 text-slate-600 rounded"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setRenaming(true)}
+              className="font-semibold text-slate-900 truncate hover:text-indigo-600 text-left"
+              title="点击改名"
+            >
+              {k.name}
+            </button>
+          )}
+          <div className="mt-1.5 flex items-center gap-2">
+            <code className="flex-1 min-w-0 px-2 py-1 bg-slate-900 text-emerald-300 text-xs font-mono rounded truncate">
+              {k.key}
+            </code>
+            <CopyButton value={k.key} />
           </div>
-          <div className="text-xs text-slate-500 mt-1 font-mono">{k.keyHint}</div>
-          <div className="text-xs text-slate-400 mt-1">可调用：{allowedLabel}</div>
+          <div className="text-xs text-slate-400 mt-1.5">可调用：{allowedLabel}</div>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {!k.isEnvKey && !editing && !confirming && (
+          {!editing && !confirming && (
             <>
               <button
                 onClick={() => { setDraft(k.allowedUpstreams); setEditing(true); }}
@@ -297,7 +308,7 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
           )}
           <div className="flex gap-2">
             <button
-              onClick={save}
+              onClick={savePerms}
               disabled={update.isPending || draftEmpty}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md disabled:opacity-50"
             >
@@ -329,7 +340,7 @@ export default function Keys() {
             <h2 className="text-base font-semibold text-slate-900">调用密钥</h2>
             <p className="text-sm text-slate-500 mt-0.5">
               {keys.length === 0
-                ? "未设置任何密钥 · 当前对外完全开放"
+                ? "暂无密钥 · 代理当前拒绝所有调用，请生成至少一个密钥"
                 : `共 ${keys.length} 个密钥 · 客户端调用时需要在 Authorization 头携带`}
             </p>
           </div>
@@ -355,7 +366,7 @@ export default function Keys() {
           <KeyRound className="w-10 h-10 mx-auto text-slate-300 mb-2" />
           <p className="text-sm text-slate-500">暂无调用密钥</p>
           <p className="text-xs text-slate-400 mt-1">
-            点击「生成密钥」创建第一个密钥后，代理将启用调用方鉴权
+            点击「生成密钥」创建第一个密钥后才能调用 `/v1/*` 接口
           </p>
         </div>
       )}

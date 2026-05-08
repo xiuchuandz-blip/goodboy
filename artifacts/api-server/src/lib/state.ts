@@ -64,21 +64,9 @@ function loadSettingsFromEnv(): Settings {
   };
 }
 
-function loadAccessKeysFromEnv(): AccessKey[] {
-  const envKey = process.env["ACCESS_KEY"];
-  if (!envKey) return [];
-  return [{
-    id: "env",
-    name: "环境变量 ACCESS_KEY",
-    key: envKey,
-    allowedUpstreams: null,
-    createdAt: Date.now(),
-  }];
-}
-
 let accounts: Account[] = loadAccountsFromEnv();
 let settings: Settings = loadSettingsFromEnv();
-let accessKeys: AccessKey[] = loadAccessKeysFromEnv();
+let accessKeys: AccessKey[] = [];
 let rrIndex = 0;
 const statsMap = new Map<string, AccountStats>();
 
@@ -88,11 +76,7 @@ if (accounts.length === 0) {
   logger.info({ count: accounts.length }, "Accounts loaded");
 }
 
-if (accessKeys.length === 0) {
-  logger.info("No access keys configured — proxy is open (no authentication required)");
-} else {
-  logger.info({ count: accessKeys.length }, "Access keys loaded");
-}
+logger.info("Access keys: managed via admin panel only; proxy denies all calls until at least one key is created");
 
 // ---------- Accounts ----------
 
@@ -174,10 +158,6 @@ export function getAccessKeys(): AccessKey[] {
 export function findAccessKey(token: string): AccessKey | null {
   if (!token) return null;
   return accessKeys.find((k) => k.key === token) ?? null;
-}
-
-export function hasAnyAccessKey(): boolean {
-  return accessKeys.length > 0;
 }
 
 function generateKey(): string {
