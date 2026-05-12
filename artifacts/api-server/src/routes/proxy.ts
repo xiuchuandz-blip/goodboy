@@ -7,15 +7,26 @@ import {
 } from "../lib/state";
 import { injectCacheControl, buildCacheHeaders } from "../lib/cache";
 import { createStatsInterceptor } from "../lib/stats-interceptor";
+import {
+  applyAnthropicHeaders,
+  shouldUseAnthropicUpstreamAuth,
+} from "../lib/anthropic";
 
 const router: IRouter = Router();
 
-function checkAccessKey(req: Request, res: Response, next: NextFunction) {
-  const auth = req.headers["authorization"] ?? "";
-  const token = (Array.isArray(auth) ? auth[0] ?? "" : auth);
-  const value = token.startsWith("Bearer ") ? token.slice(7).trim() : token.trim();
+function getHeaderValue(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] ?? "" : value ?? "").trim();
+}
 
-  const matched = findAccessKey(value);
+function getBearerToken(header: string): string {
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : header.trim();
+}
+
+function checkAccessKey(req: Request, res: Response, next: NextFunction) {
+  const bearerToken = getBearerToken(getHeaderValue(req.headers["authorization"]));
+  const apiKeyToken = getHeaderValue(req.headers["x-api-key"]);
+
+  const matched = findAccessKey(bearerToken) ?? findAccessKey(apiKeyToken);
   if (!matched) {
     res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
     return;
@@ -44,6 +55,8 @@ const HOP_BY_HOP = new Set([
   "te", "trailers", "transfer-encoding", "upgrade", "host", "expect",
 ]);
 
+const CLIENT_AUTH_HEADERS = new Set(["authorization", "x-api-key"]);
+
 const REVEALING_HEADERS = new Set([
   "openai-organization", "openai-processing-ms", "openai-version", "openai-model",
   "anthropic-ratelimit-input-tokens-limit", "anthropic-ratelimit-input-tokens-remaining",
@@ -62,14 +75,21 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
   try {
     const qs = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
     const targetUrl = `${account.url}/v1${req.path}${qs}`;
+    const useAnthropicAuth = shouldUseAnthropicUpstreamAuth(req.path, req.headers);
 
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) {
-      if (!HOP_BY_HOP.has(k.toLowerCase())) {
+      const lower = k.toLowerCase();
+      if (!HOP_BY_HOP.has(lower) && !CLIENT_AUTH_HEADERS.has(lower)) {
         headers[k] = Array.isArray(v) ? v.join(", ") : (v ?? "");
       }
     }
-    headers["authorization"] = `Bearer ${account.key}`;
+    if (useAnthropicAuth) {
+      headers["x-api-key"] = account.key;
+      applyAnthropicHeaders(headers);
+    } else {
+      headers["authorization"] = `Bearer ${account.key}`;
+    }
     Object.assign(headers, buildCacheHeaders(headers));
 
     let body: string | undefined;
@@ -81,7 +101,12 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
       headers["content-length"] = String(Buffer.byteLength(body));
     }
 
-    logger.info({ method: req.method, target: targetUrl, account: account.label }, "Proxying request");
+    logger.info({
+      method: req.method,
+      target: targetUrl,
+      account: account.label,
+      upstreamAuth: useAnthropicAuth ? "x-api-key" : "bearer",
+    }, "Proxying request");
 
     const upstreamRes = await fetch(targetUrl, {
       method: req.method,
@@ -101,7 +126,9 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
     res.setHeader("server", "nginx");
 
     if (upstreamRes.body) {
-      const interceptor = createStatsInterceptor(account.url, isStreaming);
+      const contentType = upstreamRes.headers.get("content-type") ?? "";
+      const responseIsStreaming = isStreaming || contentType.toLowerCase().includes("text/event-stream");
+      const interceptor = createStatsInterceptor(account.url, responseIsStreaming);
       Readable.fromWeb(upstreamRes.body as import("stream/web").ReadableStream<Uint8Array>)
         .pipe(interceptor)
         .pipe(res);
