@@ -25,6 +25,9 @@ export function prepareAnthropicMessagesBody(body: unknown): unknown {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;
   const next = { ...(body as Record<string, unknown>) };
   delete next["context_management"];
+  delete next["container"];
+  delete next["mcp_servers"];
+  delete next["service_tier"];
   return next;
 }
 
