@@ -41,7 +41,7 @@ function pickAccount(_req: Request, res: Response, next: NextFunction) {
 
 const HOP_BY_HOP = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-  "te", "trailers", "transfer-encoding", "upgrade", "host",
+  "te", "trailers", "transfer-encoding", "upgrade", "host", "expect",
 ]);
 
 const REVEALING_HEADERS = new Set([

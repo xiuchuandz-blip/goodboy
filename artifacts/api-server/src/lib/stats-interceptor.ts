@@ -43,6 +43,8 @@ function extractFromSSE(text: string, url: string): void {
       if (u && typeof u === "object" && "prompt_tokens" in u) {
         inputTokens = Math.max(inputTokens, u["prompt_tokens"] ?? 0);
         outputTokens = Math.max(outputTokens, u["completion_tokens"] ?? 0);
+        cacheWriteTokens = Math.max(cacheWriteTokens, u["cache_creation_input_tokens"] ?? 0);
+        cacheHitTokens = Math.max(cacheHitTokens, u["cache_read_input_tokens"] ?? 0);
       }
     } catch { /* skip malformed chunks */ }
   }

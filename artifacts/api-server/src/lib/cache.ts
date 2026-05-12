@@ -4,6 +4,33 @@ function buildCacheControl(ttl: CacheTTL): Record<string, string> {
   return ttl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
 }
 
+function cacheTextContent(content: unknown, cc: Record<string, string>): unknown {
+  if (typeof content === "string" && content.length > 0) {
+    return [{ type: "text", text: content, cache_control: cc }];
+  }
+  if (Array.isArray(content) && content.length > 0) {
+    const next = [...content];
+    const last = next[next.length - 1];
+    if (last && typeof last === "object") {
+      next[next.length - 1] = { ...(last as Record<string, unknown>), cache_control: cc };
+    }
+    return next;
+  }
+  return content;
+}
+
+function cacheLastMessageByRole(messages: unknown[], role: string, cc: Record<string, string>): unknown[] {
+  const next = [...messages];
+  const idx = next.findLastIndex(
+    (m: unknown) => !!m && typeof m === "object" && (m as Record<string, unknown>)["role"] === role,
+  );
+  if (idx < 0) return next;
+
+  const msg = next[idx] as Record<string, unknown>;
+  next[idx] = { ...msg, content: cacheTextContent(msg["content"], cc) };
+  return next;
+}
+
 export function injectCacheControl(body: unknown): unknown {
   const { cacheMode, cacheTTL } = getSettings();
   if (cacheMode === "none") return body;
@@ -14,36 +41,15 @@ export function injectCacheControl(body: unknown): unknown {
   let result = { ...obj };
 
   if (cacheMode === "system-only" || cacheMode === "system+rolling") {
-    if (typeof result["system"] === "string" && (result["system"] as string).length > 0) {
-      result["system"] = [{ type: "text", text: result["system"], cache_control: cc }];
-    } else if (Array.isArray(result["system"]) && result["system"].length > 0) {
-      const system = [...(result["system"] as unknown[])];
-      const last = system[system.length - 1] as Record<string, unknown>;
-      system[system.length - 1] = { ...last, cache_control: cc };
-      result["system"] = system;
+    result["system"] = cacheTextContent(result["system"], cc);
+
+    if (!result["system"] && Array.isArray(result["messages"])) {
+      result["messages"] = cacheLastMessageByRole(result["messages"] as unknown[], "system", cc);
     }
   }
 
   if (cacheMode === "system+rolling" && Array.isArray(result["messages"])) {
-    const messages = [...(result["messages"] as unknown[])];
-    const lastUserIdx = messages.findLastIndex(
-      (m: unknown) => (m as Record<string, unknown>)["role"] === "user",
-    );
-    if (lastUserIdx >= 0) {
-      const msg = messages[lastUserIdx] as Record<string, unknown>;
-      if (typeof msg["content"] === "string") {
-        messages[lastUserIdx] = {
-          ...msg,
-          content: [{ type: "text", text: msg["content"], cache_control: cc }],
-        };
-      } else if (Array.isArray(msg["content"])) {
-        const content = [...(msg["content"] as unknown[])];
-        const lastContent = content[content.length - 1] as Record<string, unknown>;
-        content[content.length - 1] = { ...lastContent, cache_control: cc };
-        messages[lastUserIdx] = { ...msg, content };
-      }
-    }
-    result["messages"] = messages;
+    result["messages"] = cacheLastMessageByRole(result["messages"] as unknown[], "user", cc);
   }
 
   return result;
