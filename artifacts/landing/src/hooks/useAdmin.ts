@@ -111,6 +111,7 @@ export interface AccessKeyRow {
   name: string;
   key: string;
   allowedUpstreams: string[] | null;
+  cacheSettings?: Partial<Pick<Settings, "cacheMode" | "cacheTTL">>;
   createdAt: number;
 }
 
@@ -124,7 +125,7 @@ export function useAccessKeys() {
 export function useAddAccessKey() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; key?: string; allowedUpstreams: string[] | null }) =>
+    mutationFn: (data: { name: string; key?: string; allowedUpstreams: string[] | null; cacheSettings?: AccessKeyRow["cacheSettings"] }) =>
       apiFetch<AccessKeyRow>("/keys", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
   });
@@ -133,7 +134,7 @@ export function useAddAccessKey() {
 export function useUpdateAccessKey() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string; name?: string; allowedUpstreams?: string[] | null }) =>
+    mutationFn: ({ id, ...patch }: { id: string; name?: string; allowedUpstreams?: string[] | null; cacheSettings?: AccessKeyRow["cacheSettings"] | null }) =>
       apiFetch(`/keys/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["accessKeys"] }); },
   });

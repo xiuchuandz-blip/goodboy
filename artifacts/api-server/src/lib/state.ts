@@ -17,6 +17,11 @@ export interface Settings {
   routingStrategy: string;
 }
 
+export interface CacheSettingsOverride {
+  cacheMode?: CacheMode;
+  cacheTTL?: CacheTTL;
+}
+
 export interface AccountStats {
   requests: number;
   inputTokens: number;
@@ -32,6 +37,8 @@ export interface AccessKey {
   key: string;
   /** List of account URLs this key may use. null = all accounts. */
   allowedUpstreams: string[] | null;
+  /** Per-key cache override. Missing fields inherit global settings. */
+  cacheSettings?: CacheSettingsOverride;
   createdAt: number;
 }
 
@@ -84,6 +91,7 @@ function applySnapshot(snap: Snapshot): void {
     name: String(k.name ?? "未命名"),
     key: String(k.key ?? generateKey()),
     allowedUpstreams: Array.isArray(k.allowedUpstreams) ? k.allowedUpstreams.map(String) : null,
+    cacheSettings: normalizeCacheSettings(k.cacheSettings),
     createdAt: Number(k.createdAt ?? Date.now()),
   }));
   if (snap.settings && typeof snap.settings === "object") {
@@ -205,10 +213,22 @@ function generateKey(): string {
   return "sk-proxy-" + randomBytes(24).toString("base64url");
 }
 
+function normalizeCacheSettings(value: unknown): CacheSettingsOverride | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const obj = value as Partial<Record<keyof CacheSettingsOverride, unknown>>;
+  const validModes: CacheMode[] = ["none", "system-only", "system+rolling"];
+  const validTTLs: CacheTTL[] = ["5m", "1h"];
+  const result: CacheSettingsOverride = {};
+  if (validModes.includes(obj.cacheMode as CacheMode)) result.cacheMode = obj.cacheMode as CacheMode;
+  if (validTTLs.includes(obj.cacheTTL as CacheTTL)) result.cacheTTL = obj.cacheTTL as CacheTTL;
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export interface CreateKeyInput {
   name: string;
   key?: string;
   allowedUpstreams?: string[] | null;
+  cacheSettings?: CacheSettingsOverride;
 }
 
 export function addAccessKey(input: CreateKeyInput): AccessKey {
@@ -217,6 +237,7 @@ export function addAccessKey(input: CreateKeyInput): AccessKey {
     name: input.name.trim() || "未命名密钥",
     key: input.key?.trim() || generateKey(),
     allowedUpstreams: input.allowedUpstreams ?? null,
+    cacheSettings: normalizeCacheSettings(input.cacheSettings),
     createdAt: Date.now(),
   };
   accessKeys.push(entry);
@@ -226,12 +247,13 @@ export function addAccessKey(input: CreateKeyInput): AccessKey {
 
 export function updateAccessKey(
   id: string,
-  patch: Partial<Pick<AccessKey, "name" | "allowedUpstreams">>,
+  patch: Partial<Pick<AccessKey, "name" | "allowedUpstreams">> & { cacheSettings?: CacheSettingsOverride | null },
 ): boolean {
   const k = accessKeys.find((x) => x.id === id);
   if (!k) return false;
   if (patch.name !== undefined) k.name = patch.name.trim() || k.name;
   if (patch.allowedUpstreams !== undefined) k.allowedUpstreams = patch.allowedUpstreams;
+  if (patch.cacheSettings !== undefined) k.cacheSettings = normalizeCacheSettings(patch.cacheSettings);
   persist();
   return true;
 }
@@ -337,6 +359,7 @@ export function importAll(payload: unknown, opts: ImportOptions = {}): ImportRes
         name: String(k.name ?? "未命名"),
         key: String(k.key ?? generateKey()),
         allowedUpstreams: Array.isArray(k.allowedUpstreams) ? k.allowedUpstreams.map(String) : null,
+        cacheSettings: normalizeCacheSettings((k as Partial<AccessKey>).cacheSettings),
         createdAt: Number(k.createdAt ?? Date.now()),
       }))
     : [];

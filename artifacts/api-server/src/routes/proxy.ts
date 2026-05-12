@@ -77,6 +77,7 @@ router.post("/v1/messages/count_tokens", checkAccessKey, (req: Request, res: Res
 
 router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Response) => {
   const account = res.locals["account"] as Account;
+  const accessKey = res.locals["accessKey"] as AccessKey | undefined;
 
   try {
     const qs = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
@@ -96,7 +97,7 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
     } else {
       headers["authorization"] = `Bearer ${account.key}`;
     }
-    Object.assign(headers, buildCacheHeaders(headers));
+    Object.assign(headers, buildCacheHeaders(headers, accessKey?.cacheSettings));
 
     let body: string | undefined;
     const isStreaming = !!req.body?.stream;
@@ -104,7 +105,7 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
       const requestBody = req.path === "/messages"
         ? prepareAnthropicMessagesBody(req.body)
         : req.body;
-      const processedBody = injectCacheControl(requestBody);
+      const processedBody = injectCacheControl(requestBody, accessKey?.cacheSettings);
       body = JSON.stringify(processedBody);
       headers["content-type"] = "application/json";
       headers["content-length"] = String(Buffer.byteLength(body));

@@ -3,8 +3,11 @@ import { Plus, Trash2, KeyRound, Copy, Check, X, Server } from "lucide-react";
 import {
   useAccessKeys, useAddAccessKey, useUpdateAccessKey, useRemoveAccessKey,
   useAccounts,
-  type AccessKeyRow, type AccountRow,
+  type AccessKeyRow, type AccountRow, type Settings,
 } from "@/hooks/useAdmin";
+
+type CacheModeDraft = Settings["cacheMode"] | "inherit";
+type CacheTTLDraft = Settings["cacheTTL"] | "inherit";
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -96,9 +99,69 @@ function UpstreamPicker({
   );
 }
 
+function CacheSettingsPicker({
+  mode,
+  ttl,
+  onModeChange,
+  onTTLChange,
+}: {
+  mode: CacheModeDraft;
+  ttl: CacheTTLDraft;
+  onModeChange: (next: CacheModeDraft) => void;
+  onTTLChange: (next: CacheTTLDraft) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <label className="text-xs font-medium text-slate-600">
+        <span className="block mb-1">缓存模式</span>
+        <select
+          value={mode}
+          onChange={(e) => onModeChange(e.target.value as CacheModeDraft)}
+          className="w-full px-2 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="inherit">继承全局</option>
+          <option value="none">关闭</option>
+          <option value="system-only">仅系统提示</option>
+          <option value="system+rolling">系统提示 + 滚动消息</option>
+        </select>
+      </label>
+      <label className="text-xs font-medium text-slate-600">
+        <span className="block mb-1">缓存时长</span>
+        <select
+          value={ttl}
+          onChange={(e) => onTTLChange(e.target.value as CacheTTLDraft)}
+          className="w-full px-2 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
+          disabled={mode === "none"}
+        >
+          <option value="inherit">继承全局</option>
+          <option value="5m">5 分钟</option>
+          <option value="1h">1 小时</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function buildCacheSettings(mode: CacheModeDraft, ttl: CacheTTLDraft): AccessKeyRow["cacheSettings"] | undefined {
+  const next: AccessKeyRow["cacheSettings"] = {};
+  if (mode !== "inherit") next.cacheMode = mode;
+  if (ttl !== "inherit" && mode !== "none") next.cacheTTL = ttl;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function cacheLabel(k: AccessKeyRow): string {
+  const mode = k.cacheSettings?.cacheMode ?? "inherit";
+  const ttl = k.cacheSettings?.cacheTTL ?? "inherit";
+  if (mode === "inherit" && ttl === "inherit") return "缓存：继承全局";
+  if (mode === "none") return "缓存：关闭";
+  return `缓存：${mode}${ttl !== "inherit" ? ` / ${ttl}` : " / 继承时长"}`;
+}
+
 function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: () => void }) {
   const [name, setName] = useState("");
   const [allowed, setAllowed] = useState<string[] | null>(null);
+  const [cacheMode, setCacheMode] = useState<CacheModeDraft>("inherit");
+  const [cacheTTL, setCacheTTL] = useState<CacheTTLDraft>("inherit");
   const add = useAddAccessKey();
   const emptyWhitelist = Array.isArray(allowed) && allowed.length === 0;
 
@@ -106,7 +169,7 @@ function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: ()
     e.preventDefault();
     if (!name.trim() || emptyWhitelist) return;
     add.mutate(
-      { name: name.trim(), allowedUpstreams: allowed },
+      { name: name.trim(), allowedUpstreams: allowed, cacheSettings: buildCacheSettings(cacheMode, cacheTTL) },
       { onSuccess: () => onClose() },
     );
   }
@@ -143,6 +206,16 @@ function AddKeyForm({ accounts, onClose }: { accounts: AccountRow[]; onClose: ()
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-slate-600">可调用的上游</label>
         <UpstreamPicker accounts={accounts} selected={allowed} onChange={setAllowed} />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-600">缓存策略</label>
+        <CacheSettingsPicker
+          mode={cacheMode}
+          ttl={cacheTTL}
+          onModeChange={setCacheMode}
+          onTTLChange={setCacheTTL}
+        />
       </div>
 
       {emptyWhitelist && (
@@ -183,6 +256,8 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string[] | null>(k.allowedUpstreams);
+  const [cacheModeDraft, setCacheModeDraft] = useState<CacheModeDraft>(k.cacheSettings?.cacheMode ?? "inherit");
+  const [cacheTTLDraft, setCacheTTLDraft] = useState<CacheTTLDraft>(k.cacheSettings?.cacheTTL ?? "inherit");
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(k.name);
 
@@ -197,7 +272,11 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
   function savePerms() {
     if (draftEmpty) return;
     update.mutate(
-      { id: k.id, allowedUpstreams: draft },
+      {
+        id: k.id,
+        allowedUpstreams: draft,
+        cacheSettings: buildCacheSettings(cacheModeDraft, cacheTTLDraft) ?? null,
+      },
       { onSuccess: () => setEditing(false) },
     );
   }
@@ -259,16 +338,22 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
             <CopyButton value={k.key} />
           </div>
           <div className="text-xs text-slate-400 mt-1.5">可调用：{allowedLabel}</div>
+          <div className="text-xs text-slate-400 mt-0.5">{cacheLabel(k)}</div>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           {!editing && !confirming && (
             <>
               <button
-                onClick={() => { setDraft(k.allowedUpstreams); setEditing(true); }}
+                onClick={() => {
+                  setDraft(k.allowedUpstreams);
+                  setCacheModeDraft(k.cacheSettings?.cacheMode ?? "inherit");
+                  setCacheTTLDraft(k.cacheSettings?.cacheTTL ?? "inherit");
+                  setEditing(true);
+                }}
                 className="px-2.5 py-1 text-xs text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-md"
               >
-                编辑权限
+                编辑
               </button>
               <button
                 onClick={() => setConfirming(true)}
@@ -301,6 +386,12 @@ function KeyCard({ k, accounts }: { k: AccessKeyRow; accounts: AccountRow[] }) {
       {editing && (
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
           <UpstreamPicker accounts={accounts} selected={draft} onChange={setDraft} />
+          <CacheSettingsPicker
+            mode={cacheModeDraft}
+            ttl={cacheTTLDraft}
+            onModeChange={setCacheModeDraft}
+            onTTLChange={setCacheTTLDraft}
+          />
           {draftEmpty && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
               ⚠ 「仅指定账号」模式下未勾选任何上游，该密钥将无法调用任何上游。

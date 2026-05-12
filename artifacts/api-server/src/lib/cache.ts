@@ -1,4 +1,4 @@
-import { getSettings, type CacheMode, type CacheTTL } from "./state";
+import { getSettings, type CacheMode, type CacheTTL, type CacheSettingsOverride } from "./state";
 
 function buildCacheControl(ttl: CacheTTL): Record<string, string> {
   return ttl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
@@ -31,8 +31,16 @@ function cacheLastMessageByRole(messages: unknown[], role: string, cc: Record<st
   return next;
 }
 
-export function injectCacheControl(body: unknown): unknown {
-  const { cacheMode, cacheTTL } = getSettings();
+function resolveCacheSettings(override?: CacheSettingsOverride | null): { cacheMode: CacheMode; cacheTTL: CacheTTL } {
+  const settings = getSettings();
+  return {
+    cacheMode: override?.cacheMode ?? settings.cacheMode,
+    cacheTTL: override?.cacheTTL ?? settings.cacheTTL,
+  };
+}
+
+export function injectCacheControl(body: unknown, override?: CacheSettingsOverride | null): unknown {
+  const { cacheMode, cacheTTL } = resolveCacheSettings(override);
   if (cacheMode === "none") return body;
   if (!body || typeof body !== "object") return body;
 
@@ -55,8 +63,11 @@ export function injectCacheControl(body: unknown): unknown {
   return result;
 }
 
-export function buildCacheHeaders(reqHeaders: Record<string, string>): Record<string, string> {
-  const { cacheMode, cacheTTL } = getSettings();
+export function buildCacheHeaders(
+  reqHeaders: Record<string, string>,
+  override?: CacheSettingsOverride | null,
+): Record<string, string> {
+  const { cacheMode, cacheTTL } = resolveCacheSettings(override);
   const extra: Record<string, string> = {};
 
   if (reqHeaders["anthropic-beta"]) {
