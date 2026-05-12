@@ -9,6 +9,8 @@ import { injectCacheControl, buildCacheHeaders } from "../lib/cache";
 import { createStatsInterceptor } from "../lib/stats-interceptor";
 import {
   applyAnthropicHeaders,
+  estimateAnthropicInputTokens,
+  prepareAnthropicMessagesBody,
   shouldUseAnthropicUpstreamAuth,
 } from "../lib/anthropic";
 
@@ -69,6 +71,10 @@ const REVEALING_HEADERS = new Set([
   "x-request-id", "x-envoy-upstream-service-time", "x-robots-tag", "replit-cluster",
 ]);
 
+router.post("/v1/messages/count_tokens", checkAccessKey, (req: Request, res: Response) => {
+  res.json({ input_tokens: estimateAnthropicInputTokens(req.body) });
+});
+
 router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Response) => {
   const account = res.locals["account"] as Account;
 
@@ -95,7 +101,10 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
     let body: string | undefined;
     const isStreaming = !!req.body?.stream;
     if (req.method !== "GET" && req.method !== "HEAD" && req.body && Object.keys(req.body).length > 0) {
-      const processedBody = injectCacheControl(req.body);
+      const requestBody = req.path === "/messages"
+        ? prepareAnthropicMessagesBody(req.body)
+        : req.body;
+      const processedBody = injectCacheControl(requestBody);
       body = JSON.stringify(processedBody);
       headers["content-type"] = "application/json";
       headers["content-length"] = String(Buffer.byteLength(body));

@@ -20,3 +20,37 @@ export function applyAnthropicHeaders(headers: Record<string, string>): void {
     headers["anthropic-version"] = DEFAULT_ANTHROPIC_VERSION;
   }
 }
+
+export function prepareAnthropicMessagesBody(body: unknown): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  const next = { ...(body as Record<string, unknown>) };
+  delete next["context_management"];
+  return next;
+}
+
+function collectText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(collectText).join("\n");
+  if (!value || typeof value !== "object") return "";
+
+  const obj = value as Record<string, unknown>;
+  if (typeof obj["text"] === "string") return obj["text"];
+  if (typeof obj["content"] === "string" || Array.isArray(obj["content"])) {
+    return collectText(obj["content"]);
+  }
+  return "";
+}
+
+export function estimateAnthropicInputTokens(body: unknown): number {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return 1;
+
+  const obj = body as Record<string, unknown>;
+  const parts = [
+    collectText(obj["system"]),
+    collectText(obj["messages"]),
+    obj["tools"] ? JSON.stringify(obj["tools"]) : "",
+  ].filter(Boolean);
+
+  const chars = parts.join("\n").length;
+  return Math.max(1, Math.ceil(chars / 3.5) + 16);
+}
