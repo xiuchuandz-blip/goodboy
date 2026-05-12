@@ -27,6 +27,7 @@ export function prepareAnthropicMessagesBody(body: unknown): unknown {
   delete next["context_management"];
   delete next["container"];
   delete next["mcp_servers"];
+  delete next["output_config"];
   delete next["service_tier"];
   return next;
 }
