@@ -91,12 +91,18 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
         headers[k] = Array.isArray(v) ? v.join(", ") : (v ?? "");
       }
     }
-    if (useAnthropicAuth) {
-      headers["x-api-key"] = account.key;
-      applyAnthropicHeaders(headers);
-    } else {
-      headers["authorization"] = `Bearer ${account.key}`;
+    function applyUpstreamAuth(targetHeaders: Record<string, string>, anthropicAuth: boolean): void {
+      delete targetHeaders["authorization"];
+      delete targetHeaders["x-api-key"];
+      if (anthropicAuth) {
+        targetHeaders["x-api-key"] = account.key;
+        applyAnthropicHeaders(targetHeaders);
+      } else {
+        targetHeaders["authorization"] = `Bearer ${account.key}`;
+      }
     }
+
+    applyUpstreamAuth(headers, useAnthropicAuth);
     Object.assign(headers, buildCacheHeaders(headers, accessKey?.cacheSettings));
 
     let body: string | undefined;
@@ -118,13 +124,34 @@ router.use("/v1", checkAccessKey, pickAccount, async (req: Request, res: Respons
       upstreamAuth: useAnthropicAuth ? "x-api-key" : "bearer",
     }, "Proxying request");
 
-    const upstreamRes = await fetch(targetUrl, {
+    let upstreamRes = await fetch(targetUrl, {
       method: req.method,
       headers,
       body,
       // @ts-ignore — Node 22+ fetch option
       duplex: "half",
     });
+
+    if (
+      req.method === "GET" &&
+      req.path === "/models" &&
+      !useAnthropicAuth &&
+      (upstreamRes.status === 401 || upstreamRes.status === 403)
+    ) {
+      const retryHeaders = { ...headers };
+      applyUpstreamAuth(retryHeaders, true);
+      logger.info({
+        method: req.method,
+        target: targetUrl,
+        account: account.label,
+        upstreamAuth: "x-api-key",
+      }, "Retrying models request with Anthropic auth");
+      upstreamRes = await fetch(targetUrl, {
+        method: req.method,
+        headers: retryHeaders,
+        duplex: "half",
+      });
+    }
 
     res.status(upstreamRes.status);
     for (const [k, v] of upstreamRes.headers.entries()) {
